@@ -120,8 +120,9 @@ useEffect(() => {
       <div className="relative w-full max-w-md px-6 md:px-12 pb-12 z-10">
         <MagicCard className="rounded-3xl border border-border/50 bg-white/40 dark:bg-black backdrop-blur-xl shadow-2xl overflow-visible!">
           <div className="flex flex-col items-center space-y-6 p-10 border-b border-border/50 text-center">
-            
-
+            <p className="text-sm font-semibold text-foreground/80 uppercase tracking-widest">
+              Sheyla Vega
+            </p>
 
             <div className="space-y-1">
               <h3 className="text-2xl font-black tracking-tight">
