@@ -20,7 +20,6 @@ import {
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useUserContext } from "@/components/(base)/providers/UserProvider";
-import { AuroraText } from "@/components/ui/aurora-text";
 import { PushNotificationToggle } from "@/components/ui/PushNotificationToggle";
 import { useState } from "react";
 import VerPerfil from "@/components/(base)/(users)/profile/VerPerfil";
@@ -174,15 +173,20 @@ export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
                       </div>
                       <ChevronDown
                         className={cn(
-                          "size-4 text-zinc-400 transition-transform shrink-0",
-                          isMiCuentaOpen ? "rotate-180" : ""
+                          "size-4 shrink-0 text-zinc-400 transition-transform duration-300 ease-in-out",
+                          isMiCuentaOpen && "rotate-180",
                         )}
                       />
                     </button>
 
-                    {/* Sub-items for MI CUENTA */}
-                    {isMiCuentaOpen && (
-                      <div className="px-4 pb-4 pt-1 flex flex-col gap-2">
+                    <div
+                      className={cn(
+                        "grid transition-[grid-template-rows] duration-300 ease-in-out",
+                        isMiCuentaOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                      )}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="flex flex-col gap-2 px-4 pt-1 pb-4">
                         <button
                           onClick={() => {
                             setIsOpen(false);
@@ -214,8 +218,9 @@ export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
                             <p className="text-[9px] text-zinc-500 dark:text-zinc-400">Administrar dispositivos.</p>
                           </div>
                         </button>
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -256,15 +261,20 @@ export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
                       </div>
                       <ChevronDown
                         className={cn(
-                          "size-4 text-zinc-400 transition-transform shrink-0",
-                          isAdminOpen ? "rotate-180" : ""
+                          "size-4 shrink-0 text-zinc-400 transition-transform duration-300 ease-in-out",
+                          isAdminOpen && "rotate-180",
                         )}
                       />
                     </button>
 
-                    {/* Sub-items for ADMINISTRACIÓN */}
-                    {isAdminOpen && (
-                      <div className="px-4 pb-4 pt-1 flex flex-col gap-2">
+                    <div
+                      className={cn(
+                        "grid transition-[grid-template-rows] duration-300 ease-in-out",
+                        isAdminOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                      )}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="flex flex-col gap-2 px-4 pt-1 pb-4">
                         <Link
                           href="/kore/admin"
                           onClick={() => setIsOpen(false)}
@@ -320,8 +330,9 @@ export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
                             <p className="text-[9px] text-zinc-500 dark:text-zinc-400">Ajustes generales y seguridad.</p>
                           </div>
                         </Link>
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -348,28 +359,6 @@ export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
               </Link>
             </div>
           )}
-        </div>
-
-        {/* Footer dentro del menú */}
-        <div className="mt-auto border-t border-border/30 px-6 py-4">
-          <div className="flex flex-col items-center justify-center gap-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">
-              © 2026 KoreAPP
-            </p>
-            <div className="text-xs font-bold uppercase tracking-widest text-zinc-600 dark:text-zinc-400 flex items-center gap-1 mt-1">
-              Powered by{" "}
-              <a
-                href="https://www.oscar27jimenez.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline cursor-pointer transition-all inline-flex items-center text-zinc-900 dark:text-zinc-100"
-              >
-                <AuroraText className="text-xs whitespace-nowrap">
-                  KoreAPP | Ing. de Software
-                </AuroraText>
-              </a>
-            </div>
-          </div>
         </div>
       </aside>
     </>

@@ -8,7 +8,7 @@ import Header from "@/components/(base)/layout/header";
 import { createClient } from "@/utils/supabase/server";
 import Providers from "@/components/(base)/providers/QueryProviders";
 import { UserProvider } from "@/components/(base)/providers/UserProvider";
-import { AuroraText } from "@/components/ui/aurora-text";
+import { AppBackground } from "@/components/(base)/layout/AppBackground";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,23 +56,26 @@ export default async function RootLayout({
   } = await supabase.auth.getUser();
 
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" className="dark" suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background flex flex-col relative`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col relative bg-black`}
       >
         <Providers>
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"
+            forcedTheme="dark"
+            enableSystem={false}
             disableTransitionOnChange
           >
+            <AppBackground />
             <UserProvider user={user}>
               <Header />
-              <main className="flex-1 w-full flex flex-col">
+              <main className="relative z-10 flex-1 w-full flex flex-col">
                 {children}
               </main>
-              <footer className="w-full transition-all backdrop-blur-3xl bg-white/50 dark:bg-black border-t border-white/50 dark:border-white/10 relative z-10 mt-auto">
+              <footer className="relative z-10 mt-auto w-full border-t border-white/10 bg-black backdrop-blur-3xl">
                 <div className="mx-auto flex h-14 md:h-16 items-center justify-center px-4 md:px-8">
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -81,21 +84,21 @@ export default async function RootLayout({
                     transition={{ duration: 0.5 }}
                     className="flex flex-col md:flex-row items-center justify-center gap-1 md:gap-4"
                   >
-                    <AuroraText className="text-[10px] md:text-xs font-black uppercase tracking-[0.3em]">
+                    <span className="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-primary">
                       © 2026 KoreAPP
-                    </AuroraText>
-                    <div className="hidden md:block w-px h-3 bg-zinc-300 dark:bg-zinc-700"></div>
+                    </span>
+                    <div className="hidden md:block w-px h-3 bg-zinc-700"></div>
                     <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest flex items-center gap-1">
-                      Powered by{" "}
+                      <span className="text-zinc-400">Powered by</span>{" "}
                       <a
                         href="https://www.oscar27jimenez.com"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="hover:underline cursor-pointer transition-all inline-flex items-center"
+                        className="hover:underline cursor-pointer transition-all inline-flex items-center text-primary"
                       >
-                        <AuroraText className="text-[10px] md:text-sm whitespace-nowrap">
+                        <span className="text-[10px] md:text-sm whitespace-nowrap">
                           KoreAPP | Ing. de Software
-                        </AuroraText>
+                        </span>
                       </a>
                     </div>
                   </motion.div>

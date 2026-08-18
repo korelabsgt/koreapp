@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "@/components/(base)/providers/UserProvider";
 import { BreadcrumbNav } from "@/components/ui/breadcrumb-nav";
 import { Menu as MenuIcon, X, RefreshCw } from "lucide-react";
-import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import Menu from "./Menu";
 import { getPendingDevicesCount } from "@/components/(Kore)/admin/lib/actions";
 import { createPortal } from "react-dom";
@@ -38,14 +37,15 @@ export default function Header() {
   }, [canManage]);
 
   const handleLogoClick = (e: React.MouseEvent) => {
-    // Prevent default navigation to show the animation instead
     e.preventDefault();
     setIsFullScreen(true);
   };
 
+  if (!user) return null;
+
   return (
     <>
-      <header className="w-full fixed top-0 left-0 transition-all bg-white dark:bg-black border-b border-border/40 z-[100] shadow-sm">
+      <header className="w-full fixed top-0 left-0 z-[100] border-b border-border/40 bg-black shadow-sm">
         <div className="mx-auto flex h-14 md:h-16 items-center justify-between px-4 md:px-8 gap-4">
           <div className="flex items-center h-full">
             <div className="flex items-center shrink-0">
@@ -67,7 +67,7 @@ export default function Header() {
                   animate={{ opacity: 1, clipPath: "inset(0 0 0 0)" }}
                   transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 1, 0.5, 1] }}
                   translate="no"
-                  className="notranslate text-xs md:text-sm font-black uppercase tracking-widest leading-[1.15] md:leading-[1.15] text-celeste-kore border-l border-border/60 pl-2 md:pl-3 transition-transform duration-300 group-hover:scale-[1.02] origin-left group-hover:text-white dark:group-hover:text-[#FFFDD0]"
+                  className="notranslate text-xs md:text-sm font-black uppercase tracking-widest leading-[1.15] md:leading-[1.15] text-celeste-kore border-l border-border/60 pl-2 md:pl-3 transition-transform duration-300 group-hover:scale-[1.02] origin-left group-hover:text-[#FFFDD0]"
                 >
                   BMS
                 </motion.div>
@@ -81,11 +81,10 @@ export default function Header() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            <AnimatedThemeToggler />
             <button
               id="refresh-btn"
               onClick={() => window.location.reload()}
-              className="flex items-center justify-center text-black hover:text-celeste-kore dark:text-white dark:hover:text-celeste-kore cursor-pointer transition-all hover:rotate-180 duration-500 active:scale-95"
+              className="flex items-center justify-center text-white hover:text-celeste-kore cursor-pointer transition-all hover:rotate-180 duration-500 active:scale-95"
             >
               <RefreshCw className="size-6 md:size-7" />
             </button>

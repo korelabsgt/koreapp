@@ -7,13 +7,15 @@ import {
   Briefcase,
   CircleDollarSign,
   CalendarDays,
-  Filter,
   Search,
   Download,
+  List,
+  LayoutGrid,
   ChevronDown,
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Phone,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -167,14 +169,14 @@ export default function DashboardProyectos() {
   const { data: proyectos = [], isLoading: loading, refetch } = useProyectos();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "alphabetical">("newest");
-  const [showList, setShowList] = useState(true);
+  const [viewMode, setViewMode] = useState<"lista" | "tarjetas">("lista");
   const [qrProyecto, setQrProyecto] = useState<Proyecto | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, itemsPerPage, sortBy]);
 
   useEffect(() => {
     if (qrProyecto && proyectos.length > 0) {
@@ -536,16 +538,16 @@ export default function DashboardProyectos() {
 
   const totalPages = useMemo(() => {
     return Math.ceil(filteredProyectos.length / itemsPerPage) || 1;
-  }, [filteredProyectos]);
+  }, [filteredProyectos, itemsPerPage]);
 
   const paginatedProyectos = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredProyectos.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredProyectos, currentPage]);
+  }, [filteredProyectos, currentPage, itemsPerPage]);
 
   const emptyRowsCount = useMemo(() => {
     return itemsPerPage - paginatedProyectos.length;
-  }, [paginatedProyectos]);
+  }, [paginatedProyectos, itemsPerPage]);
 
   // Proyectos con fecha de entrega para la vista de usuarios normales
   const proyectosConFecha = useMemo(() => {
@@ -605,7 +607,7 @@ export default function DashboardProyectos() {
   }, [proyectos]);
 
   return (
-    <div className="w-full max-w-5xl mx-auto flex flex-col gap-4 sm:gap-6 text-foreground px-2 pt-32 pb-8 md:px-4 md:pt-28 relative">
+    <div className="w-full max-w-7xl mx-auto flex flex-col gap-4 sm:gap-6 text-foreground px-2 pt-32 pb-8 md:px-6 md:pt-28 relative">
       {/* Decorative Background Glows */}
       <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-celeste-kore/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse" />
       <div className="absolute bottom-[10%] right-[-5%] w-[30%] h-[30%] bg-azul-kore/5 rounded-full blur-[100px] pointer-events-none -z-10" />
@@ -642,110 +644,115 @@ export default function DashboardProyectos() {
       {isAdmin && (
         <>
           {/* TABLE SECTION - Admin only (Rendered FIRST) */}
-          <div className="rounded-2xl border border-celeste-kore/55 dark:border-border bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl p-4 sm:p-6 shadow-none dark:shadow-2xl dark:shadow-black/20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-4">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <button
-                  onClick={() => setShowList(!showList)}
-                  className="p-1.5 sm:p-2 hover:bg-muted/50 rounded-lg transition-colors group"
-                >
-                  <motion.div
-                    animate={{ rotate: showList ? 0 : -90 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Filter size={16} className="text-celeste-kore sm:w-[18px] sm:h-[18px]" />
-                  </motion.div>
-                </button>
-                <h3 className="text-xs sm:text-sm font-black uppercase tracking-widest text-foreground/90">Lista de Proyectos</h3>
-              </div>
-              <motion.div
-                initial={false}
-                animate={{ opacity: showList ? 1 : 0, scale: showList ? 1 : 0.95, x: showList ? 0 : 20 }}
-                className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto ${!showList ? 'pointer-events-none' : ''}`}
-              >
-                <div className="relative flex-1 sm:w-[240px]">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="BUSCAR PROYECTO..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-muted/20 border border-border/60 rounded-lg py-2 pl-9 pr-3 text-[9px] font-black uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-celeste-kore/30 transition-all placeholder:text-muted-foreground/40 shadow-inner"
-                  />
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700/80 bg-zinc-50 dark:bg-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-none dark:shadow-2xl dark:shadow-black/20">
+            <div className="px-5 pt-5 pb-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-xl font-black uppercase tracking-wider text-celeste-kore">Lista de Proyectos</h3>
+                  <p className="text-[11px] font-bold text-celeste-kore/70 mt-0.5">Total: {filteredProyectos.length}</p>
                 </div>
-                <div className="relative flex-1 sm:w-[240px]">
-                  <Select value={sortBy} onValueChange={(val: string) => setSortBy(val as "newest" | "oldest" | "alphabetical")}>
-                    <SelectTrigger className="w-full h-9 bg-card border border-border/50 text-[9px] font-black uppercase tracking-widest text-foreground/80 rounded-lg focus:outline-none focus:ring-2 focus:ring-celeste-kore/30 hover:bg-muted/50 transition-all shadow-sm outline-none px-3">
-                      <SelectValue placeholder="Ordenar por" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border/50 shadow-xl rounded-xl w-auto min-w-[160px]">
-                      <SelectItem value="newest" className="text-[10px] font-bold uppercase tracking-widest focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
+                <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+                  <button
+                    type="button"
+                    onClick={exportarPDF}
+                    className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-celeste-kore/40 text-celeste-kore hover:bg-celeste-kore/10 transition-all text-[10px] font-black uppercase tracking-widest cursor-pointer min-w-0"
+                  >
+                    <Download size={14} className="shrink-0" />
+                    <span className="truncate">Exportar PDF</span>
+                  </button>
+                  <div className="flex-1 sm:flex-none min-w-0">
+                    <Select value={sortBy} onValueChange={(val: string) => setSortBy(val as "newest" | "oldest" | "alphabetical")}>
+                      <SelectTrigger className="h-9 w-full sm:min-w-[10.5rem] sm:w-auto bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80 transition-all outline-none px-3 cursor-pointer whitespace-nowrap">
+                        <SelectValue placeholder="Ordenar" />
+                      </SelectTrigger>
+                    <SelectContent className="bg-card border-border/50 shadow-xl rounded-xl z-[200]">
+                      <SelectItem value="newest" className="text-xs font-medium focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
                         Más reciente
                       </SelectItem>
-                      <SelectItem value="oldest" className="text-[10px] font-bold uppercase tracking-widest focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
+                      <SelectItem value="oldest" className="text-xs font-medium focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
                         Menos reciente
                       </SelectItem>
-                      <SelectItem value="alphabetical" className="text-[10px] font-bold uppercase tracking-widest focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
+                      <SelectItem value="alphabetical" className="text-xs font-medium focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
                         Orden alfabético
                       </SelectItem>
                     </SelectContent>
-                  </Select>
+                    </Select>
+                  </div>
                 </div>
-                <button
-                  onClick={exportarPDF}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-border/50 bg-card hover:bg-muted/50 hover:border-celeste-kore/30 transition-all text-xs font-bold shadow-sm group whitespace-nowrap"
-                >
-                  <Download size={14} className="text-celeste-kore group-hover:scale-110 transition-transform" />
-                  <span className="uppercase tracking-widest text-[9px]">Exportar PDF</span>
-                </button>
-              </motion.div>
+              </div>
             </div>
 
-            <motion.div
-              initial={false}
-              animate={{
-                height: showList ? "auto" : 0,
-                opacity: showList ? 1 : 0
-              }}
-              className="w-full overflow-hidden"
-            >
-              {loading ? (
-                <div className="space-y-4 py-8">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="flex items-center space-x-4 p-4 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
-                      <Skeleton className="h-12 w-12 rounded-full" />
-                      <div className="space-y-2 flex-1">
-                        <Skeleton className="h-4 w-[250px]" />
-                        <Skeleton className="h-4 w-[200px]" />
-                      </div>
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 px-5 py-4">
+              <div className="relative flex-1 min-w-0">
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Buscar por proyecto o cliente..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 transition-all placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <div className="flex w-full items-center gap-2 shrink-0 lg:w-auto">
+                <div className="flex w-full items-center rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/60 overflow-hidden lg:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("lista")}
+                    className={`flex flex-1 lg:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors cursor-pointer ${viewMode === "lista" ? "bg-celeste-kore text-white" : "bg-transparent text-muted-foreground hover:text-celeste-kore"}`}
+                  >
+                    <List size={14} />
+                    Lista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("tarjetas")}
+                    className={`flex flex-1 lg:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors cursor-pointer border-l border-zinc-200 dark:border-zinc-700 ${viewMode === "tarjetas" ? "bg-celeste-kore text-white" : "bg-transparent text-muted-foreground hover:text-celeste-kore"}`}
+                  >
+                    <LayoutGrid size={14} />
+                    Tarjetas
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="space-y-4 py-8 px-5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center space-x-4 p-4 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                    <Skeleton className="h-12 w-12 rounded-full" />
+                    <div className="space-y-2 flex-1">
+                      <Skeleton className="h-4 w-[250px]" />
+                      <Skeleton className="h-4 w-[200px]" />
                     </div>
-                  ))}
-                </div>
-              ) : filteredProyectos.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground border-t border-border/30">
-                  <p className="text-sm">No se encontraron proyectos.</p>
-                </div>
-              ) : (
-                <>
-                  {/* DESKTOP TABLE - hidden on mobile */}
-                  <div className="hidden lg:block overflow-x-auto rounded-2xl border border-border/50 bg-card">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-celeste-kore/10 dark:bg-celeste-kore/20 border-b border-border/50">
-                        <tr className="text-[10px] text-celeste-kore dark:text-white uppercase tracking-[0.15em]">
-                          <th className="py-4 px-4 font-black">Código</th>
-                          <th className="py-4 px-2 font-black">Proyecto</th>
-                          <th className="py-4 px-2 font-black">Cliente</th>
-                          <th className="py-4 px-2 font-black">Estado</th>
-                          <th className="py-4 px-2 font-black text-right">Precio</th>
-                          <th className="py-4 px-2 font-black text-right">Comisión</th>
-                          <th className="py-4 px-2 font-black text-right">Desarrollo</th>
-                          <th className="py-4 px-2 font-black text-right">IVA</th>
-                          <th className="py-4 px-2 font-black text-right">Doc</th>
-                          <th className="py-4 pl-2 pr-4 font-black text-right">Saldo Final</th>
+                  </div>
+                ))}
+              </div>
+            ) : filteredProyectos.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground border-t border-zinc-200 dark:border-zinc-700/80">
+                <p className="text-sm">No se encontraron proyectos.</p>
+              </div>
+            ) : (
+              <>
+                {viewMode === "lista" ? (
+                  <div className="overflow-x-auto border-t border-zinc-200 dark:border-zinc-700/80">
+                    <table className="w-full min-w-[1100px] text-left text-xs border-collapse">
+                      <thead className="bg-zinc-200/70 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700/80">
+                        <tr className="text-[9px] text-celeste-kore uppercase tracking-widest">
+                          <th className="max-lg:sticky max-lg:left-0 max-lg:z-20 px-4 py-3 font-black whitespace-nowrap bg-zinc-200/70 dark:bg-zinc-800 max-lg:border-r max-lg:border-zinc-200 max-lg:dark:border-zinc-700/80 max-lg:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)]">Código</th>
+                          <th className="px-4 py-3 font-black whitespace-nowrap">Proyecto</th>
+                          <th className="px-4 py-3 font-black whitespace-nowrap">Cliente</th>
+                          <th className="px-4 py-3 font-black whitespace-nowrap">Estado</th>
+                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Precio</th>
+                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Comisión</th>
+                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Desarrollo</th>
+                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">IVA</th>
+                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Doc</th>
+                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Saldo Final</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedProyectos.map((p) => {
+                        {paginatedProyectos.map((p, rowIdx) => {
                           const precio = Number(p.precio) || 0;
                           const comision = p.aplica_vendedor ? precio * (Number(p.porcentaje_vendedor) || 0) / 100 : 0;
                           const desarrollo = p.aplica_desarrollo ? precio * (Number(p.porcentaje_desarrollo) || 0) / 100 : 0;
@@ -760,192 +767,150 @@ export default function DashboardProyectos() {
                                 sessionStorage.setItem('selectedProyectoId', p.id);
                                 router.push('/kore/proyectos/ver');
                               }}
-                              className="group border-b border-border/50 last:border-0 even:bg-muted/10 odd:bg-transparent hover:bg-muted/30 cursor-pointer transition-all duration-300"
+                              className="group border-b border-zinc-200/80 dark:border-zinc-700/50 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 even:bg-zinc-100/40 dark:even:bg-zinc-800/25 odd:bg-transparent cursor-pointer transition-colors"
                             >
-                              <td className="py-4 px-4 transition-all duration-300">
-                                <code className="text-xs font-mono font-bold text-celeste-kore bg-celeste-kore/10 px-2 py-1 rounded border border-celeste-kore/20">{getCode(p.id)}</code>
+                              <td className={`max-lg:sticky max-lg:left-0 max-lg:z-10 px-4 py-3 font-mono text-[10px] whitespace-nowrap max-lg:border-r max-lg:border-zinc-200/80 max-lg:dark:border-zinc-700/50 max-lg:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.12)] ${rowIdx % 2 === 1 ? "max-lg:bg-zinc-100 max-lg:dark:bg-zinc-800/25" : "max-lg:bg-zinc-50 max-lg:dark:bg-zinc-900"} max-lg:group-hover:bg-zinc-100 max-lg:dark:group-hover:bg-zinc-800/60`}>
+                                <span className="font-bold text-celeste-kore bg-celeste-kore/10 px-1.5 py-0.5 rounded border border-celeste-kore/20">{getCode(p.id)}</span>
                               </td>
-                              <td className="py-4 transition-all duration-300">
-                                <p className="font-bold text-sm text-foreground group-hover:text-celeste-kore transition-colors">{p.nombre}</p>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <p className="font-semibold text-black dark:text-white group-hover:text-celeste-kore transition-colors">{p.nombre}</p>
                               </td>
-                              <td className="py-4 transition-all duration-300">
-                                <p className="text-sm text-foreground">{p.cliente_nombre || 'N/A'}</p>
-                                <p className="text-[10px] text-muted-foreground">{formatPhoneDisplay(p.cliente_telefono)}</p>
+                              <td className="px-4 py-3">
+                                <p className="font-semibold text-black dark:text-white whitespace-nowrap">{p.cliente_nombre || 'N/A'}</p>
+                                {p.cliente_telefono && (
+                                  <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-celeste-kore border border-celeste-kore/30 rounded-full px-2 py-0.5 bg-celeste-kore/10 whitespace-nowrap">
+                                    <Phone size={10} className="shrink-0" />
+                                    {formatPhoneDisplay(p.cliente_telefono)}
+                                  </span>
+                                )}
                               </td>
-                              <td className="py-4 transition-all duration-300">
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${p.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${p.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
                                     p.estado === 'Finalizados' ? 'bg-muted text-muted-foreground border-border' :
-                                      'bg-azul-kore/10 text-azul-kore border-azul-kore/20 shadow-sm'
+                                      'bg-celeste-kore/5 text-celeste-kore/80 border-celeste-kore/15'
                                   }`}>
                                   {p.estado}
                                 </span>
                               </td>
-                              <td className="py-4 text-right transition-all duration-300">
-                                <p className="font-bold text-sm">Q{precio.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <p className="font-black text-black dark:text-white">Q{precio.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                               </td>
-                              <td className="py-4 text-right transition-all duration-300">
-                                <p className={`text-sm ${comision > 0 ? 'text-red-400 font-bold' : 'text-muted-foreground'}`}>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <p className={`${comision > 0 ? 'text-celeste-kore font-bold' : 'text-muted-foreground'}`}>
                                   {comision > 0 ? `Q${comision.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
                                 </p>
-                                {comision > 0 && <p className="text-[10px] text-muted-foreground">{p.porcentaje_vendedor}%</p>}
+                                {comision > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_vendedor}%</p>}
                               </td>
-                              <td className="py-4 text-right transition-all duration-300">
-                                <p className={`text-sm ${desarrollo > 0 ? 'text-celeste-kore font-bold' : 'text-muted-foreground'}`}>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <p className={`${desarrollo > 0 ? 'text-celeste-kore font-bold' : 'text-muted-foreground'}`}>
                                   {desarrollo > 0 ? `Q${desarrollo.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
                                 </p>
-                                {desarrollo > 0 && <p className="text-[10px] text-muted-foreground">{p.porcentaje_desarrollo}%</p>}
+                                {desarrollo > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_desarrollo}%</p>}
                               </td>
-                              <td className="py-4 text-right transition-all duration-300">
-                                <p className={`text-sm ${iva > 0 ? 'text-azul-kore font-bold' : 'text-muted-foreground'}`}>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <p className={`${iva > 0 ? 'text-black dark:text-white font-bold' : 'text-muted-foreground'}`}>
                                   {iva > 0 ? `Q${iva.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
                                 </p>
-                                {iva > 0 && <p className="text-[10px] text-muted-foreground">{p.porcentaje_iva}%</p>}
+                                {iva > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_iva}%</p>}
                               </td>
-                              <td className="py-4 text-right transition-all duration-300">
-                                <p className={`text-sm ${doc > 0 ? 'text-amber-500 font-bold' : 'text-muted-foreground'}`}>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <p className={`${doc > 0 ? 'text-black dark:text-white font-bold' : 'text-muted-foreground'}`}>
                                   {doc > 0 ? `Q${doc.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
                                 </p>
-                                {doc > 0 && <p className="text-[10px] text-muted-foreground">{p.porcentaje_doc}%</p>}
+                                {doc > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_doc}%</p>}
                               </td>
-                              <td className="py-4 pr-4 text-right transition-all duration-300">
-                                <p className="font-black text-sm text-celeste-kore">Q{restante.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <p className="font-black text-celeste-kore">Q{restante.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                               </td>
                             </tr>
                           );
                         })}
                         {emptyRowsCount > 0 && Array.from({ length: emptyRowsCount }).map((_, idx) => (
-                          <tr
-                            key={`empty-${idx}`}
-                            className="opacity-0 pointer-events-none select-none"
-                          >
-                            <td className="py-3 px-4">
-                              <code className="text-xs font-mono font-bold">&nbsp;</code>
-                            </td>
-                            <td className="py-4">
-                              <p className="font-bold text-sm text-foreground">&nbsp;</p>
-                            </td>
-                            <td className="py-4">
-                              <p className="text-sm text-foreground">&nbsp;</p>
-                              <p className="text-[10px] text-muted-foreground">&nbsp;</p>
-                            </td>
-                            <td className="py-4">
-                              <span className="inline-flex items-center px-2.5 py-1 text-[10px] font-black uppercase tracking-wider">&nbsp;</span>
-                            </td>
-                            <td className="py-4 text-right">
-                              <p className="font-bold text-sm">&nbsp;</p>
-                            </td>
-                            <td className="py-4 text-right">
-                              <p className="text-sm text-muted-foreground">&nbsp;</p>
-                              <p className="text-[10px] text-muted-foreground">&nbsp;</p>
-                            </td>
-                            <td className="py-4 text-right">
-                              <p className="text-sm text-muted-foreground">&nbsp;</p>
-                              <p className="text-[10px] text-muted-foreground">&nbsp;</p>
-                            </td>
-                            <td className="py-4 text-right">
-                              <p className="text-sm text-muted-foreground">&nbsp;</p>
-                              <p className="text-[10px] text-muted-foreground">&nbsp;</p>
-                            </td>
-                            <td className="py-4 text-right">
-                              <p className="text-sm text-muted-foreground">&nbsp;</p>
-                              <p className="text-[10px] text-muted-foreground">&nbsp;</p>
-                            </td>
-                            <td className="py-4 pr-4 text-right">
-                              <p className="font-black text-sm text-celeste-kore">&nbsp;</p>
-                            </td>
+                          <tr key={`empty-${idx}`} className="opacity-0 pointer-events-none select-none">
+                            <td className={`max-lg:sticky max-lg:left-0 max-lg:z-10 px-4 py-3 max-lg:border-r max-lg:border-zinc-200/80 max-lg:dark:border-zinc-700/50 ${(paginatedProyectos.length + idx) % 2 === 1 ? "max-lg:bg-zinc-100 max-lg:dark:bg-zinc-800/25" : "max-lg:bg-zinc-50 max-lg:dark:bg-zinc-900"}`}><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
+                            <td className="px-4 py-3"><span>&nbsp;</span></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-
-                  {/* MOBILE CARDS - hidden on desktop */}
-                  <div className="lg:hidden flex flex-col gap-2">
-                    {paginatedProyectos.map((p) => {
-                      return (
-                        <div
-                          key={p.id}
-                          className="rounded-lg border border-celeste-kore/55 dark:border-white/10 bg-gradient-to-br from-card/90 to-card/50 backdrop-blur-lg p-2.5 flex items-center justify-between gap-3 shadow-none dark:shadow-md hover:border-celeste-kore/70 transition-all duration-300 cursor-pointer group"
-                          onClick={() => {
-                            sessionStorage.setItem('selectedProyectoId', p.id);
-                            router.push('/kore/proyectos/ver');
-                          }}
-                        >
-                          {/* Left: Project Name and Client */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-[11px] text-foreground truncate tracking-tight">{p.nombre}</h4>
-                            <p className="text-[8px] text-muted-foreground mt-0.5 truncate">
-                              Cliente: <span className="font-semibold text-foreground/80">{p.cliente_nombre || 'Sin cliente'}</span>
-                            </p>
-                          </div>
-
-                          {/* Right: Code, State & Arrow/Ver */}
-                          <div className="flex items-center gap-2 shrink-0">
-                            {/* Code and State stacked vertically */}
-                            <div className="flex flex-col items-end gap-1">
-                              <code className="text-[7px] font-mono font-bold text-celeste-kore bg-celeste-kore/10 px-1 py-0.5 rounded border border-celeste-kore/20 shrink-0">
-                                {getCode(p.id)}
-                              </code>
-                              <span className={`inline-flex items-center px-1 py-0.5 rounded text-[6px] font-black uppercase tracking-wider border shrink-0 ${p.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
-                                  p.estado === 'Finalizados' ? 'bg-muted text-muted-foreground border-border' :
-                                    'bg-azul-kore/10 text-azul-kore border-azul-kore/20 shadow-sm'
-                                }`}>
-                                {p.estado}
-                              </span>
-                            </div>
-
-                            {/* Arrow & "ver" */}
-                            <div className="flex flex-col items-center justify-center text-muted-foreground/50 group-hover:text-celeste-kore transition-colors pl-1.5 border-l border-border/40 min-w-[24px]">
-                              <ChevronRight size={12} className="translate-x-0 group-hover:translate-x-0.5 transition-transform" />
-                              <span className="text-[6px] font-bold uppercase tracking-widest mt-0.5">ver</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {emptyRowsCount > 0 && Array.from({ length: emptyRowsCount }).map((_, idx) => (
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 p-5 border-t border-zinc-200 dark:border-zinc-700/80">
+                    {paginatedProyectos.map((p) => (
                       <div
-                        key={`empty-mobile-${idx}`}
-                        className="opacity-0 pointer-events-none select-none p-2.5 flex flex-col gap-1.5 border border-transparent bg-transparent rounded-lg"
+                        key={p.id}
+                        className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/60 p-3 flex flex-col gap-2 hover:border-celeste-kore/40 transition-all cursor-pointer group"
+                        onClick={() => {
+                          sessionStorage.setItem('selectedProyectoId', p.id);
+                          router.push('/kore/proyectos/ver');
+                        }}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1 min-w-0">
-                            <code className="text-[8px]">&nbsp;</code>
-                          </div>
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-bold text-sm text-foreground group-hover:text-celeste-kore transition-colors line-clamp-2">{p.nombre}</h4>
+                          <span className="font-bold text-[10px] font-mono text-celeste-kore bg-celeste-kore/10 px-1.5 py-0.5 rounded border border-celeste-kore/20 shrink-0">{getCode(p.id)}</span>
                         </div>
-                        <div className="min-w-0">
-                          <h4 className="font-bold text-[11px]">&nbsp;</h4>
-                          <p className="text-[8px] mt-0.5">&nbsp;</p>
+                        <p className="text-xs text-muted-foreground">
+                          Cliente: <span className="font-semibold text-foreground">{p.cliente_nombre || 'Sin cliente'}</span>
+                        </p>
+                        <div className="flex items-center justify-between gap-2 mt-auto pt-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${p.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
+                              p.estado === 'Finalizados' ? 'bg-muted text-muted-foreground border-border' :
+                                'bg-celeste-kore/5 text-celeste-kore/80 border-celeste-kore/15'
+                            }`}>
+                            {p.estado}
+                          </span>
+                          <span className="text-xs font-black text-celeste-kore">Q{Number(p.precio || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     ))}
                   </div>
+                )}
 
-                  {/* Pagination Controls */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-center gap-6 mt-6 pt-4 border-t border-border/30">
-                      <button
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        className="p-2 rounded-xl border border-border bg-card/50 hover:bg-muted/50 hover:border-celeste-kore/30 text-muted-foreground hover:text-celeste-kore disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-sm"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <span className="text-xs font-black uppercase tracking-widest text-foreground bg-muted/30 border border-border/30 px-3.5 py-1.5 rounded-lg select-none">
-                        PÁG. {currentPage} / {totalPages}
-                      </span>
-                      <button
-                        disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                        className="p-2 rounded-xl border border-border bg-card/50 hover:bg-muted/50 hover:border-celeste-kore/30 text-muted-foreground hover:text-celeste-kore disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-sm"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </motion.div>
+                <div className="flex items-center justify-center gap-2 px-5 py-4 border-t border-zinc-200 dark:border-zinc-700/80 bg-zinc-100/60 dark:bg-zinc-800/40">
+                  <button
+                    type="button"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    className="p-1 text-muted-foreground hover:text-celeste-kore disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <span className="text-sm font-medium text-foreground min-w-[40px] text-center select-none">
+                    {currentPage}/{totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                    className="p-1 text-muted-foreground hover:text-celeste-kore disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                  <Select
+                    value={String(itemsPerPage)}
+                    onValueChange={(val) => setItemsPerPage(Number(val))}
+                  >
+                    <SelectTrigger className="h-9 w-[72px] ml-2 bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 cursor-pointer outline-none px-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border/50 shadow-xl rounded-xl z-[200]">
+                      <SelectItem value="5" className="cursor-pointer">5</SelectItem>
+                      <SelectItem value="10" className="cursor-pointer">10</SelectItem>
+                      <SelectItem value="15" className="cursor-pointer">15</SelectItem>
+                      <SelectItem value="25" className="cursor-pointer">25</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
 
           {/* CHARTS SECTION */}

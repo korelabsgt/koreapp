@@ -13,6 +13,8 @@ interface MagicCardProps {
   gradientOpacity?: number;
   gradientFrom?: string;
   gradientTo?: string;
+  gradientEnd?: string;
+  gradientMidStop?: number;
   style?: React.CSSProperties;
 }
 
@@ -22,6 +24,8 @@ export function MagicCard({
   gradientSize = 200,
   gradientFrom = "#9E7AFF",
   gradientTo = "#FE8BBB",
+  gradientEnd,
+  gradientMidStop,
   style,
 }: MagicCardProps) {
   const mouseX = useMotionValue(-gradientSize);
@@ -81,9 +85,9 @@ export function MagicCard({
         style={{
           background: useMotionTemplate`
           radial-gradient(${gradientSize}px circle at ${mouseX}px ${mouseY}px,
-          ${gradientFrom}, 
-          ${gradientTo}, 
-          var(--border) 100%
+          ${gradientFrom} 0%,
+          ${gradientTo} ${gradientMidStop ?? 50}%,
+          ${gradientEnd ?? "var(--border)"} 100%
           )
           `,
         }}

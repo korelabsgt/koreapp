@@ -5,9 +5,9 @@ import { login, getPublicAppSettings, type ActionState } from "./actions";
 import { getPasskeyOptions, verifyPasskey } from "./passkeys/passkeys-actions";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { MagicCard } from "@/components/ui/magic-card";
-import { Eye, EyeOff, Fingerprint, ScanFace, KeyRound, User, ArrowBigUpDash } from "lucide-react";
+import { Eye, EyeOff, Fingerprint, ScanFace, KeyRound, LogIn as LogInIcon, ArrowBigUpDash } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { AuroraText } from "@/components/ui/aurora-text";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTheme } from "next-themes";
 import Swal from "sweetalert2";
@@ -119,20 +119,40 @@ export default function LogIn() {
   return (
     <div className="relative flex-1 flex flex-col items-center justify-center w-full bg-transparent z-0 overflow-hidden">
       <div className="relative w-full max-w-md px-6 md:px-12 pb-12 z-10">
-        <MagicCard className="rounded-3xl border border-border/50 bg-white/40 dark:bg-black backdrop-blur-xl shadow-2xl overflow-visible!">
-          <div className="flex flex-col items-center space-y-6 p-10 border-b border-border/50 text-center">
-            <div className="space-y-1">
-              <h3 className="text-2xl font-black tracking-tight">
-                <AuroraText>Bienvenido de nuevo</AuroraText>
-              </h3>
-              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.2em]">
-                KORE AUTHENTICATION SYSTEM
+        <MagicCard
+          gradientFrom="#B7494E"
+          gradientTo="#B7494E"
+          gradientEnd="#000000"
+          gradientMidStop={34}
+          gradientSize={460}
+          className="rounded-3xl border border-border/50 bg-white/40 dark:bg-black backdrop-blur-xl shadow-2xl overflow-visible!"
+        >
+          <div className="flex flex-col items-center px-10 pt-10 text-center">
+            <div className="flex w-full flex-col items-center gap-0">
+              <Image
+                src="/kore/kore.png"
+                alt="KORE"
+                width={320}
+                height={120}
+                className="w-full h-auto object-contain"
+                priority
+              />
+              <p className="-mt-2 flex w-full justify-between text-sm font-bold uppercase tracking-[0.2em] text-white md:text-base">
+                <span>Systems</span>
+                <span>development</span>
               </p>
             </div>
           </div>
 
+          <div className="flex items-center px-10 py-6">
+            <div className="flex h-1 w-full shrink-0">
+              <div className="flex-1 bg-secondary" />
+              <div className="flex-1 bg-primary" />
+            </div>
+          </div>
+
           {isLoadingSettings ? (
-            <div className="flex flex-col gap-6 p-10 w-full animate-in fade-in duration-500">
+            <div className="flex flex-col gap-6 px-10 pb-10 pt-0 w-full animate-in fade-in duration-500">
               <div className="flex flex-col gap-6">
                 <div className="grid gap-2">
                   <Skeleton className="h-4 w-16" />
@@ -150,7 +170,7 @@ export default function LogIn() {
               action={formAction}
               className={cn(
                 "transition-all duration-500 flex flex-col",
-                showCredentials ? "gap-6 p-10" : "gap-0 px-10 pb-10 pt-8"
+                showCredentials ? "gap-6 px-10 pb-10 pt-0" : "gap-0 px-10 pb-10 pt-0"
               )}
             >
               <div
@@ -163,7 +183,7 @@ export default function LogIn() {
               >
                 <div className="overflow-hidden p-2 -m-2 flex flex-col gap-6">
                   <div className="grid gap-2">
-                    <label className="text-sm font-semibold text-foreground/70">
+                    <label className="text-sm font-semibold text-white">
                       Usuario
                     </label>
                     <input
@@ -172,7 +192,7 @@ export default function LogIn() {
                       placeholder="Tu usuario"
                       required={showCredentials}
                       value={username}
-                      className="flex h-10 w-full rounded-lg border border-input bg-background/50 px-3 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                      className="flex h-10 w-full rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-2 text-sm text-white placeholder:text-zinc-500 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40 focus:placeholder:text-primary/60 focus:placeholder:font-bold"
                       onChange={(e) =>
                         setUsername(e.target.value.toLowerCase().trim())
                       }
@@ -185,7 +205,7 @@ export default function LogIn() {
                   </div>
 
                   <div className="grid gap-2">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-foreground/70">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-white">
                       Contraseña
                       {isCapsLockOn && (
                         <span className="text-[10px] text-amber-500 font-bold uppercase animate-pulse">
@@ -209,7 +229,7 @@ export default function LogIn() {
                         onKeyDown={handleKeyUpDown}
                         onKeyUp={handleKeyUpDown}
                         className={cn(
-                          "flex h-10 w-full rounded-lg border border-input bg-background/50 py-2 text-sm pr-10 transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
+                          "flex h-10 w-full rounded-lg border border-zinc-700 bg-zinc-900/50 py-2 text-sm text-white placeholder:text-zinc-500 pr-10 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40 focus:placeholder:text-primary/60 focus:placeholder:font-bold",
                           isCapsLockOn ? "pl-9" : "pl-3"
                         )}
                         placeholder="••••••••"
@@ -239,11 +259,11 @@ export default function LogIn() {
                       setShowCredentials(true);
                     }
                   }}
-                  className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all duration-300 bg-secondary hover:bg-secondary/90 hover:border-border/80 hover:shadow-md border border-border text-secondary-foreground cursor-pointer active:scale-[0.98] disabled:opacity-50"
+                  className="w-full h-16 inline-flex items-center justify-center gap-3 rounded-xl text-lg font-black transition-all duration-300 bg-zinc-900 hover:bg-zinc-800 text-white cursor-pointer active:scale-[0.98] disabled:opacity-50"
                   disabled={showCredentials && (isPending || isPasskeyPending)}
                 >
-                  <User className="size-4 text-secondary-foreground/70" />
-                  <span>
+                  <LogInIcon className="size-6 text-white" strokeWidth={2.5} />
+                  <span className="font-black">
                     {!showCredentials
                       ? "Iniciar sesión con contraseña"
                       : isPending
