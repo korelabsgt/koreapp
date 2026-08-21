@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Proyecto } from "@/components/(Kore)/proyectos/lib/zod";
+import { getEstadoProyectoBadgeClass, normalizeEstadoProyecto } from "@/components/(Kore)/proyectos/lib/helpers";
 
 interface ClientProjectItem {
   id: string;
@@ -346,12 +347,8 @@ export default function ClientesModal({
                                           {proj.nombre}
                                         </td>
                                         <td className="px-4 py-3">
-                                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase border tracking-wider ${
-                                            proj.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
-                                            proj.estado === 'Finalizados' ? 'bg-muted text-muted-foreground border-border' :
-                                            'bg-azul-kore/10 text-azul-kore border-azul-kore/20 shadow-sm'
-                                          }`}>
-                                            {proj.estado}
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase border tracking-wider ${getEstadoProyectoBadgeClass(proj.estado)}`}>
+                                            {normalizeEstadoProyecto(proj.estado)}
                                           </span>
                                         </td>
                                         <td className="px-4 py-3 text-right font-black text-white">

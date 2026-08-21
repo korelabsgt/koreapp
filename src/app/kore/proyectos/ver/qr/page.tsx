@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import { QRProyectoView } from "@/components/(Kore)/proyectos/QRProyecto/QRProyectoView";
+import ProyectoVerRedirect from "@/components/(Kore)/proyectos/ProyectoVerRedirect";
 
-export default function ProyectoQRPage() {
+export default function ProyectoQRLegacyPage() {
   return (
     <Suspense>
-      <QRProyectoView />
+      <ProyectoVerRedirect suffix="qr" />
     </Suspense>
   );
 }

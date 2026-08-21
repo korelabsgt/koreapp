@@ -1,22 +1,41 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, animate, useMotionValue, useMotionValueEvent } from "framer-motion";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Briefcase,
-  CircleDollarSign,
-  CalendarDays,
-  Search,
+  Wrench,
+  Hammer,
+  Plus,
+  CirclePlus,
   Download,
-  List,
-  LayoutGrid,
-  ChevronDown,
-  Calendar,
+  FileDown,
+  Search,
+  ScanSearch,
   ChevronLeft,
+  ArrowLeft,
   ChevronRight,
-  Phone,
-} from "lucide-react";
+  ArrowRight,
+  MoveRight,
+  ArrowUpRight,
+  PieChart as LucidePieChart,
+  FolderKanban,
+  CircleDollarSign,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
+  CalendarDays,
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Clock,
+  History,
+  CaseSensitive,
+} from "lucide";
+import { MorphIcon } from "morphicons/react";
+import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BarChart,
@@ -28,20 +47,17 @@ import {
   PieChart,
   Pie,
   Cell,
+  Sector,
+  Rectangle,
 } from "recharts";
 import { useProyectos } from "@/components/(Kore)/proyectos/lib/hooks";
-import { Proyecto } from "@/components/(Kore)/proyectos/lib/zod";
+import { getProyectoVerPath, ESTADO_PROYECTO_CHART_COLOR, getEstadoProyectoBadgeClass } from "@/components/(Kore)/proyectos/lib/helpers";
+import { ESTADOS_PROYECTO, normalizeEstadoProyecto, Proyecto } from "@/components/(Kore)/proyectos/lib/zod";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import QRProyecto from "../QRProyecto/QRProyecto";
+import { RangeDateSegmentInput } from "./RangeDateSegmentInput";
 import { useUserContext } from "@/components/(base)/providers/UserProvider";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 
 // TypeScript declaration for the Lordicon web component
@@ -70,36 +86,214 @@ const monthsAbbr = [
   "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
 ];
 
-const getWeeksOfMonth = (year: number, month: number) => {
-  const weeks = [];
-  const monthNames = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+type EstadoPieSectorProps = {
+  index?: number;
+  outerRadius?: number;
+  innerRadius?: number;
+  startAngle?: number;
+  endAngle?: number;
+  cx?: number;
+  cy?: number;
+  fill?: string;
+};
 
-  for (let i = 0; i < 5; i++) {
-    const startDay = 1 + i * 7;
+const ESTADO_PIE_ACTIVE_OUTER_OFFSET = 5;
+const INGRESO_BAR_PRECIO_COLOR = "#B7494E";
+const INGRESO_BAR_COMISION_COLOR = "#22c55e";
+const INGRESO_BAR_IVA_COLOR = "#0ea5e9";
 
-    // Construct start date
-    const startDate = new Date(year, month, startDay);
-    // Construct end date (start date + 6 days)
-    const endDate = new Date(year, month, startDay + 6);
+type IngresoBarPoint = {
+  name: string;
+  dateStr?: string;
+  precio: number;
+  comision: number;
+  iva: number;
+  neto: number;
+  sortKey?: number;
+};
 
-    const startLabel = `${startDate.getDate()} ${monthNames[startDate.getMonth()]}`;
-    const endLabel = `${endDate.getDate()} ${monthNames[endDate.getMonth()]}`;
+function IngresoBarTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ payload: IngresoBarPoint }>;
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
 
-    weeks.push({
-      label: `${startLabel} - ${endLabel}`,
-      start: startDate,
-      end: endDate
-    });
+  const point = payload[0].payload;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-white shadow-xl">
+      <p className="mb-1.5 font-bold">{label}</p>
+      {point.comision > 0 ? (
+        <p>Comisión: Q {point.comision.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+      ) : null}
+      {point.iva > 0 ? (
+        <p>IVA: Q {point.iva.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+      ) : null}
+      <p>Precio: Q {point.precio.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+    </div>
+  );
+}
+
+const INGRESO_BAR_SEGMENT_RADIUS = 8;
+const INGRESO_BAR_SIZE = 16;
+
+type IngresoBarShapeProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+};
+
+function IngresoOverlayBarShape(props: IngresoBarShapeProps) {
+  const { x = 0, y = 0, width = 0, height = 0, fill } = props;
+  if (height <= 0 || width <= 0) return null;
+
+  return (
+    <Rectangle
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      fill={fill}
+      radius={[INGRESO_BAR_SEGMENT_RADIUS, INGRESO_BAR_SEGMENT_RADIUS, 0, 0]}
+    />
+  );
+}
+
+const ESTADO_PIE_CENTER_EASE = [0.4, 0, 0.2, 1] as const;
+const ESTADO_PIE_MOTION = {
+  duration: 0.35,
+  ease: ESTADO_PIE_CENTER_EASE,
+} as const;
+
+const ESTADO_TABLE_BADGE_CLASS =
+  "inline-flex w-[7rem] items-center justify-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border";
+
+const ROW_HOVER_TEXT_CLASS =
+  "text-black dark:text-white transition-colors group-hover:text-celeste-kore";
+const ROW_ACCENT_CLASS = "text-celeste-kore transition-colors group-hover:text-celeste-kore";
+
+function EstadoPieSector({
+  activeIndex,
+  cornerRadius,
+  ...props
+}: EstadoPieSectorProps & { activeIndex: number; cornerRadius: number }) {
+  const isActive = props.index === activeIndex && activeIndex >= 0;
+  const baseOuter = typeof props.outerRadius === "number" ? props.outerRadius : 0;
+  const motionOuter = useMotionValue(baseOuter);
+  const [outerRadius, setOuterRadius] = useState(baseOuter);
+
+  useMotionValueEvent(motionOuter, "change", setOuterRadius);
+
+  useEffect(() => {
+    const target = isActive ? baseOuter + ESTADO_PIE_ACTIVE_OUTER_OFFSET : baseOuter;
+    return animate(motionOuter, target, ESTADO_PIE_MOTION).stop;
+  }, [baseOuter, isActive, motionOuter]);
+
+  return <Sector {...props} outerRadius={outerRadius} cornerRadius={cornerRadius} />;
+}
+
+const PROYECTOS_ACTION_BTN_CLASS =
+  "flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-celeste-kore px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-celeste-kore/90 sm:flex-none sm:px-4 sm:py-2 sm:text-[10px]";
+
+const PROYECTO_SORT_OPTIONS = [
+  { value: "newest", label: "Más reciente", shortLabel: "Reciente", icon: ArrowDownWideNarrow, iconActive: Clock },
+  { value: "oldest", label: "Menos reciente", shortLabel: "Antiguo", icon: ArrowUpWideNarrow, iconActive: History },
+  { value: "alphabetical", label: "A-Z", shortLabel: "A-Z", icon: ArrowDownAZ, iconActive: CaseSensitive },
+  { value: "alphabetical-desc", label: "Z-A", shortLabel: "Z-A", icon: ArrowUpAZ, iconActive: CaseSensitive },
+] as const;
+
+const PROYECTO_SORT_CONTROL_WIDTH_CLASS = "w-[3.25rem] sm:w-[3.5rem]";
+
+type ProyectoSort = (typeof PROYECTO_SORT_OPTIONS)[number]["value"];
+
+type LucideIconData = typeof Wrench;
+
+const GT_MONTH_ABBR = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"] as const;
+
+function getGtDateParts(date: Date) {
+  const gt = { timeZone: "America/Guatemala" } as const;
+  const weekdayRaw = date.toLocaleDateString("es-GT", { ...gt, weekday: "short" });
+  const weekday = `${weekdayRaw.charAt(0).toUpperCase()}${weekdayRaw.slice(1).replace(/\.$/, "")}`;
+  const day = date.toLocaleDateString("en-US", { ...gt, day: "2-digit" });
+  const monthIndex = Number(date.toLocaleDateString("en-US", { ...gt, month: "numeric" })) - 1;
+  const year = date.toLocaleDateString("en-US", { ...gt, year: "2-digit" });
+
+  return {
+    weekday,
+    day,
+    month: GT_MONTH_ABBR[monthIndex] ?? "---",
+    year,
+  };
+}
+
+function ProyectoTableFecha({ dateStr }: { dateStr: string | null | undefined }) {
+  if (!dateStr) {
+    return <p className={cn("text-[10px] font-semibold", ROW_HOVER_TEXT_CLASS)}>—</p>;
   }
-  return weeks;
-};
 
-const formatDateSlash = (dateStr: string) => {
-  if (!dateStr) return "";
-  const parts = dateStr.split("-");
-  if (parts.length !== 3) return dateStr;
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
-};
+  const date = new Date(dateStr.includes("T") ? dateStr : `${dateStr.split("T")[0]}T12:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return <p className={cn("text-[10px] font-semibold", ROW_HOVER_TEXT_CLASS)}>—</p>;
+  }
+
+  const { weekday, day, month, year } = getGtDateParts(date);
+
+  return (
+    <p className={cn("text-[10px] font-semibold", ROW_HOVER_TEXT_CLASS)}>
+      {weekday} {day}
+      <span className={cn("font-black", ROW_ACCENT_CLASS)}>{month}</span>
+      {year}
+    </p>
+  );
+}
+
+function DashboardMorphIcon({
+  icon,
+  iconActive,
+  size = 16,
+  strokeWidth = 2,
+  className,
+  wrapperClassName,
+  engaged,
+}: {
+  icon: LucideIconData;
+  iconActive: LucideIconData;
+  size?: number;
+  strokeWidth?: number;
+  className?: string;
+  wrapperClassName?: string;
+  engaged?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const active = engaged !== undefined ? engaged : hovered;
+
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-center justify-center", wrapperClassName)}
+      {...(engaged === undefined
+        ? {
+            onMouseEnter: () => setHovered(true),
+            onMouseLeave: () => setHovered(false),
+          }
+        : {})}
+    >
+      <MorphIcon
+        icon={active ? iconActive : icon}
+        size={size}
+        strokeWidth={strokeWidth}
+        spring="snappy"
+        className={className}
+      />
+    </span>
+  );
+}
 
 export default function DashboardProyectos() {
   const router = useRouter();
@@ -121,58 +315,57 @@ export default function DashboardProyectos() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [tempYear, setTempYear] = useState<number>(new Date().getFullYear());
-  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number | null>(null);
 
   const [showYearPicker, setShowYearPicker] = useState(false);
-  const [showWeekPicker, setShowWeekPicker] = useState(false);
-  const [showRangePicker, setShowRangePicker] = useState(false);
-  const [rangeActiveField, setRangeActiveField] = useState<"start" | "end">("start");
-  const [viewingMonth, setViewingMonth] = useState<number>(new Date().getMonth());
-  const [viewingYear, setViewingYear] = useState<number>(new Date().getFullYear());
 
-  const getDaysInMonthGrid = useCallback((year: number, month: number) => {
-    const startOfMonth = new Date(year, month, 1);
-    const endOfMonth = new Date(year, month + 1, 0);
-    const daysInMonth = endOfMonth.getDate();
-
-    const startDayOfWeek = startOfMonth.getDay();
-    const grid = [];
-
-    for (let i = 0; i < startDayOfWeek; i++) {
-      grid.push(null);
-    }
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      grid.push({ dayNum: d, dateStr });
-    }
-
-    return grid;
-  }, []);
-  const handleDayClick = (dayStr: string) => {
-    if (rangeActiveField === "start") {
-      if (dayStr > dateRange.end) {
-        setDateRange({ start: dayStr, end: dayStr });
+  const commitRangeStart = useCallback(
+    (iso: string) => {
+      if (iso > dateRange.end) {
+        setDateRange({ start: iso, end: iso });
       } else {
-        setDateRange(prev => ({ ...prev, start: dayStr }));
+        setDateRange((prev) => ({ ...prev, start: iso }));
       }
-    } else {
-      if (dayStr < dateRange.start) {
-        setDateRange({ start: dayStr, end: dayStr });
+    },
+    [dateRange.end],
+  );
+
+  const commitRangeEnd = useCallback(
+    (iso: string) => {
+      if (iso < dateRange.start) {
+        setDateRange({ start: iso, end: iso });
       } else {
-        setDateRange(prev => ({ ...prev, end: dayStr }));
+        setDateRange((prev) => ({ ...prev, end: iso }));
       }
-    }
-    setShowRangePicker(false);
-  };
+    },
+    [dateRange.start],
+  );
 
   const { data: proyectos = [], isLoading: loading, refetch } = useProyectos();
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "alphabetical">("newest");
-  const [viewMode, setViewMode] = useState<"lista" | "tarjetas">("lista");
+  const [sortBy, setSortBy] = useState<ProyectoSort>("newest");
   const [qrProyecto, setQrProyecto] = useState<Proyecto | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [itemsPerPage, setItemsPerPage] = useState<15 | 30 | 45 | "all">(15);
+  const [mantenimientoHovered, setMantenimientoHovered] = useState(false);
+  const [nuevoHovered, setNuevoHovered] = useState(false);
+  const [exportHovered, setExportHovered] = useState(false);
+  const [sortHovered, setSortHovered] = useState(false);
+  const [searchHovered, setSearchHovered] = useState(false);
+  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
+  const [ingresoHeaderHovered, setIngresoHeaderHovered] = useState(false);
+  const [estadoChartHovered, setEstadoChartHovered] = useState(false);
+  const [selectedEstadoSegment, setSelectedEstadoSegment] = useState<{
+    name: string;
+    value: number;
+    mant: number;
+    color: string;
+  } | null>(null);
+  const [hoveredEstadoSegment, setHoveredEstadoSegment] = useState<{
+    name: string;
+    value: number;
+    mant: number;
+    color: string;
+  } | null>(null);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -285,7 +478,7 @@ export default function DashboardProyectos() {
         p.cliente_nombre || "N/A",
         p.vendedor_nombre || "N/A",
         p.desarrollador_nombre || "N/A",
-        p.estado || "",
+        normalizeEstadoProyecto(p.estado),
         `Q${precio.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
         comision > 0 ? `Q${comision.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—",
         desarrollo > 0 ? `Q${desarrollo.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—",
@@ -360,25 +553,51 @@ export default function DashboardProyectos() {
     return { totalPrecio, totalIva, totalComisiones, totalMantenimiento, count: proyectos.length };
   }, [proyectos]);
 
-  const pieData = useMemo(() => {
+  const pieLegendItems = useMemo(() => {
     const counts = {
-      "En Progreso": { count: 0, mant: 0 },
+      "En progreso": { count: 0, mant: 0 },
+      Activo: { count: 0, mant: 0 },
       "En pausa": { count: 0, mant: 0 },
-      "Finalizados": { count: 0, mant: 0 }
     };
-    proyectos.forEach(p => {
-      const mant = Number(p.mantenimiento) || 0;
-      if (p.estado === "En Progreso") { counts["En Progreso"].count++; counts["En Progreso"].mant += mant; }
-      else if (p.estado === "En pausa") { counts["En pausa"].count++; counts["En pausa"].mant += mant; }
-      else { counts["Finalizados"].count++; counts["Finalizados"].mant += mant; }
+
+    proyectos.forEach((p) => {
+      const estado = normalizeEstadoProyecto(p.estado);
+      counts[estado].count += 1;
+      counts[estado].mant += Number(p.mantenimiento) || 0;
     });
 
-    return [
-      { name: "Activos", value: counts["En Progreso"].count || 0, mant: counts["En Progreso"].mant, color: "#B7494E" },
-      { name: "En pausa", value: counts["En pausa"].count || 0, mant: counts["En pausa"].mant, color: "#3D3C3C" },
-      { name: "Finalizados", value: counts["Finalizados"].count || 0, mant: counts["Finalizados"].mant, color: "#a1a1aa" },
-    ].filter(d => d.value > 0);
+    return ESTADOS_PROYECTO.map((name) => ({
+      name,
+      value: counts[name].count,
+      mant: counts[name].mant,
+      color: ESTADO_PROYECTO_CHART_COLOR[name],
+    }));
   }, [proyectos]);
+
+  const pieChartSegments = useMemo(
+    () => pieLegendItems.filter((item) => item.value > 0),
+    [pieLegendItems],
+  );
+
+  const pieHasMultipleSegments = pieChartSegments.length > 1;
+
+  const activeEstadoSegment = hoveredEstadoSegment ?? selectedEstadoSegment;
+
+  const activeEstadoPieIndex =
+    activeEstadoSegment && activeEstadoSegment.value > 0
+      ? pieChartSegments.findIndex((item) => item.name === activeEstadoSegment.name)
+      : -1;
+
+  const renderEstadoPieSector = useCallback(
+    (props: EstadoPieSectorProps) => (
+      <EstadoPieSector
+        {...props}
+        activeIndex={activeEstadoPieIndex}
+        cornerRadius={pieHasMultipleSegments ? 6 : 0}
+      />
+    ),
+    [activeEstadoPieIndex, pieHasMultipleSegments],
+  );
 
   const barData = useMemo(() => {
     const now = new Date();
@@ -432,65 +651,27 @@ export default function DashboardProyectos() {
     }
 
     if (chartTab === "MES") {
-      if (selectedWeekIndex !== null) {
-        const weeks = getWeeksOfMonth(selectedYear, selectedMonth);
-        const week = weeks[selectedWeekIndex];
-        const start = new Date(week.start);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(week.end);
-        end.setHours(23, 59, 59, 999);
+      const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+      const dataByDay = Array.from({ length: daysInMonth }, (_, i) => ({
+        name: (i + 1).toString(),
+        precio: 0,
+        comision: 0,
+        iva: 0
+      }));
 
-        // Generate 7 days for the selected week
-        const dataByDay: { name: string; dateStr: string; precio: number; comision: number; iva: number }[] = [];
-        const tempDate = new Date(start);
-        for (let i = 0; i < 7; i++) {
-          dataByDay.push({
-            name: tempDate.getDate().toString(),
-            dateStr: tempDate.toISOString().split("T")[0],
-            precio: 0,
-            comision: 0,
-            iva: 0
-          });
-          tempDate.setDate(tempDate.getDate() + 1);
+      proyectos.forEach(p => {
+        const date = new Date(p.created_at);
+        if (date.getFullYear() === selectedYear && date.getMonth() === selectedMonth) {
+          const d = date.getDate() - 1;
+          const precio = Number(p.precio) || 0;
+          dataByDay[d].precio += precio;
+          if (p.aplica_vendedor) dataByDay[d].comision += precio * (Number(p.porcentaje_vendedor) || 0) / 100;
+          if (p.aplica_iva) dataByDay[d].iva += precio * (Number(p.porcentaje_iva) || 0) / 100;
         }
+      });
 
-        proyectos.forEach(p => {
-          const date = new Date(p.created_at);
-          if (date >= start && date <= end) {
-            const s = date.toISOString().split("T")[0];
-            const item = dataByDay.find(i => i.dateStr === s);
-            if (item) {
-              const precio = Number(p.precio) || 0;
-              item.precio += precio;
-              if (p.aplica_vendedor) item.comision += precio * (Number(p.porcentaje_vendedor) || 0) / 100;
-              if (p.aplica_iva) item.iva += precio * (Number(p.porcentaje_iva) || 0) / 100;
-            }
-          }
-        });
-        return dataByDay;
-      } else {
-        const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-        const dataByDay = Array.from({ length: daysInMonth }, (_, i) => ({
-          name: (i + 1).toString(),
-          precio: 0,
-          comision: 0,
-          iva: 0
-        }));
-
-        proyectos.forEach(p => {
-          const date = new Date(p.created_at);
-          if (date.getFullYear() === selectedYear && date.getMonth() === selectedMonth) {
-            const d = date.getDate() - 1;
-            const precio = Number(p.precio) || 0;
-            dataByDay[d].precio += precio;
-            if (p.aplica_vendedor) dataByDay[d].comision += precio * (Number(p.porcentaje_vendedor) || 0) / 100;
-            if (p.aplica_iva) dataByDay[d].iva += precio * (Number(p.porcentaje_iva) || 0) / 100;
-          }
-        });
-
-        const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
-        return dataByDay.filter(d => d.precio > 0 || !isCurrentMonth || Number(d.name) <= now.getDate());
-      }
+      const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
+      return dataByDay.filter(d => d.precio > 0 || !isCurrentMonth || Number(d.name) <= now.getDate());
     } else {
       const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
       const dataByMonth = Array.from({ length: 12 }, (_, i) => ({ name: months[i], precio: 0, comision: 0, iva: 0 }));
@@ -513,7 +694,16 @@ export default function DashboardProyectos() {
         return dataByMonth;
       }
     }
-  }, [proyectos, chartTab, dateRange, selectedMonth, selectedYear, selectedWeekIndex]);
+  }, [proyectos, chartTab, dateRange, selectedMonth, selectedYear]);
+
+  const chartBarData = useMemo<IngresoBarPoint[]>(
+    () =>
+      barData.map((item) => ({
+        ...item,
+        neto: Math.max(0, item.precio - item.comision - item.iva),
+      })),
+    [barData],
+  );
 
   const filteredProyectos = useMemo(() => {
     let result = [...proyectos];
@@ -528,7 +718,10 @@ export default function DashboardProyectos() {
 
     return [...result].sort((a, b) => {
       if (sortBy === "alphabetical") {
-        return (a.nombre || "").localeCompare(b.nombre || "");
+        return (a.nombre || "").localeCompare(b.nombre || "", "es");
+      }
+      if (sortBy === "alphabetical-desc") {
+        return (b.nombre || "").localeCompare(a.nombre || "", "es");
       }
       const dateA = new Date(a.created_at || 0).getTime();
       const dateB = new Date(b.created_at || 0).getTime();
@@ -536,18 +729,24 @@ export default function DashboardProyectos() {
     });
   }, [proyectos, searchTerm, sortBy]);
 
+  const resolvedItemsPerPage = useMemo(
+    () => (itemsPerPage === "all" ? Math.max(filteredProyectos.length, 1) : itemsPerPage),
+    [filteredProyectos.length, itemsPerPage],
+  );
+
   const totalPages = useMemo(() => {
-    return Math.ceil(filteredProyectos.length / itemsPerPage) || 1;
-  }, [filteredProyectos, itemsPerPage]);
+    return Math.ceil(filteredProyectos.length / resolvedItemsPerPage) || 1;
+  }, [filteredProyectos, resolvedItemsPerPage]);
 
   const paginatedProyectos = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredProyectos.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredProyectos, currentPage, itemsPerPage]);
+    const startIndex = (currentPage - 1) * resolvedItemsPerPage;
+    return filteredProyectos.slice(startIndex, startIndex + resolvedItemsPerPage);
+  }, [filteredProyectos, currentPage, resolvedItemsPerPage]);
 
   const emptyRowsCount = useMemo(() => {
-    return itemsPerPage - paginatedProyectos.length;
-  }, [paginatedProyectos, itemsPerPage]);
+    if (itemsPerPage === "all") return 0;
+    return resolvedItemsPerPage - paginatedProyectos.length;
+  }, [paginatedProyectos, resolvedItemsPerPage, itemsPerPage]);
 
   // Proyectos con fecha de entrega para la vista de usuarios normales
   const proyectosConFecha = useMemo(() => {
@@ -567,29 +766,6 @@ export default function DashboardProyectos() {
     return date.toLocaleDateString("es-GT", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  const formatPhoneDisplay = (phone: string | null | undefined): string => {
-    if (!phone) return "";
-    const clean = phone.trim();
-    if (!clean) return "";
-
-    // Clean spaces to match formats like +502 4214 0797 or +50242140797
-    const cleanNoSpaces = clean.replace(/\s+/g, "");
-
-    // GT number with +502 and 8 digits -> XXXX-XXXX
-    const gtMatch = cleanNoSpaces.match(/^\+502(\d{4})(\d{4})$/);
-    if (gtMatch) {
-      return `${gtMatch[1]}-${gtMatch[2]}`;
-    }
-
-    // GT number with 8 digits (no prefix) -> XXXX-XXXX
-    const gtShortMatch = cleanNoSpaces.match(/^(\d{4})(\d{4})$/);
-    if (gtShortMatch) {
-      return `${gtShortMatch[1]}-${gtShortMatch[2]}`;
-    }
-
-    return clean;
-  };
-
   const getDaysUntil = (dateStr: string) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -606,8 +782,18 @@ export default function DashboardProyectos() {
     }) || false;
   }, [proyectos]);
 
+  const activeSortIndex = PROYECTO_SORT_OPTIONS.findIndex((option) => option.value === sortBy);
+  const activeSort =
+    PROYECTO_SORT_OPTIONS[activeSortIndex >= 0 ? activeSortIndex : 0];
+  const nextSort =
+    PROYECTO_SORT_OPTIONS[(activeSortIndex + 1 + PROYECTO_SORT_OPTIONS.length) % PROYECTO_SORT_OPTIONS.length];
+
+  const cycleSort = () => {
+    setSortBy(nextSort.value);
+  };
+
   return (
-    <div className="w-full max-w-7xl mx-auto flex flex-col gap-4 sm:gap-6 text-foreground px-2 pt-32 pb-8 md:px-6 md:pt-28 relative">
+    <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-4 px-2 pb-8 pt-4 text-foreground sm:gap-6 md:px-6 md:pt-6">
       {/* Decorative Background Glows */}
       <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-celeste-kore/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse" />
       <div className="absolute bottom-[10%] right-[-5%] w-[30%] h-[30%] bg-azul-kore/5 rounded-full blur-[100px] pointer-events-none -z-10" />
@@ -615,28 +801,9 @@ export default function DashboardProyectos() {
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl sm:text-4xl font-black tracking-tight mt-0.5 sm:mt-1 leading-none">
-            GESTIÓN DE <br className="hidden sm:block" />
-            <span className="text-celeste-kore">PROYECTOS</span>
+          <h1 className="mt-0.5 text-xl font-black leading-none tracking-tight sm:mt-1 sm:text-4xl">
+            GESTIÓN DE <span className="text-celeste-kore">PROYECTOS</span>
           </h1>
-        </div>
-
-        <div className="flex items-stretch gap-2 w-full sm:w-auto">
-          <button
-            onClick={() => router.push("/kore/proyectos/mantenimiento")}
-            className="relative flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-2.5 sm:px-6 sm:py-4 rounded-xl bg-celeste-kore text-black hover:bg-celeste-kore border border-transparent transition-all font-black text-[10px] sm:text-sm whitespace-nowrap cursor-pointer"
-          >
-            MANTENIMIENTO
-            {hasPendingMaintenance && (
-              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-yellow-400 rounded-full border-2 border-background shadow-[0_0_8px_rgba(250,204,21,0.8)] animate-pulse" />
-            )}
-          </button>
-          <button
-            onClick={() => router.push("/kore/proyectos/nuevo")}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-2.5 sm:px-6 sm:py-4 rounded-xl bg-celeste-kore text-black hover:bg-celeste-kore border border-transparent transition-all font-black text-[10px] sm:text-sm whitespace-nowrap cursor-pointer"
-          >
-            NUEVO
-          </button>
         </div>
       </div>
 
@@ -644,73 +811,119 @@ export default function DashboardProyectos() {
       {isAdmin && (
         <>
           {/* TABLE SECTION - Admin only (Rendered FIRST) */}
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700/80 bg-zinc-50 dark:bg-zinc-900/90 backdrop-blur-xl overflow-hidden shadow-none dark:shadow-2xl dark:shadow-black/20">
-            <div className="px-5 pt-5 pb-2">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700/80 bg-zinc-50 dark:bg-zinc-900/90 backdrop-blur-xl shadow-none dark:shadow-2xl dark:shadow-black/20">
+            <div className="px-5 py-3.5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <h3 className="text-base sm:text-xl font-black uppercase tracking-wider text-celeste-kore">Lista de Proyectos</h3>
-                  <p className="text-[11px] font-bold text-celeste-kore/70 mt-0.5">Total: {filteredProyectos.length}</p>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                  <h3 className="text-base font-black uppercase leading-none tracking-wider text-celeste-kore sm:text-xl">
+                    Lista de Proyectos
+                  </h3>
+                  <p className="text-[11px] font-bold leading-none whitespace-nowrap text-white">
+                    Total: {filteredProyectos.length}
+                  </p>
                 </div>
                 <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
                   <button
                     type="button"
                     onClick={exportarPDF}
-                    className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-celeste-kore/40 text-celeste-kore hover:bg-celeste-kore/10 transition-all text-[10px] font-black uppercase tracking-widest cursor-pointer min-w-0"
+                    onMouseEnter={() => setExportHovered(true)}
+                    onMouseLeave={() => setExportHovered(false)}
+                    className={`min-w-0 ${PROYECTOS_ACTION_BTN_CLASS}`}
                   >
-                    <Download size={14} className="shrink-0" />
-                    <span className="truncate">Exportar PDF</span>
+                    <span className="truncate">EXPORTAR PDF</span>
+                    <DashboardMorphIcon
+                      icon={Download}
+                      iconActive={FileDown}
+                      size={16}
+                      className="text-white"
+                      engaged={exportHovered}
+                    />
                   </button>
-                  <div className="flex-1 sm:flex-none min-w-0">
-                    <Select value={sortBy} onValueChange={(val: string) => setSortBy(val as "newest" | "oldest" | "alphabetical")}>
-                      <SelectTrigger className="h-9 w-full sm:min-w-[10.5rem] sm:w-auto bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80 transition-all outline-none px-3 cursor-pointer whitespace-nowrap">
-                        <SelectValue placeholder="Ordenar" />
-                      </SelectTrigger>
-                    <SelectContent className="bg-card border-border/50 shadow-xl rounded-xl z-[200]">
-                      <SelectItem value="newest" className="text-xs font-medium focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
-                        Más reciente
-                      </SelectItem>
-                      <SelectItem value="oldest" className="text-xs font-medium focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
-                        Menos reciente
-                      </SelectItem>
-                      <SelectItem value="alphabetical" className="text-xs font-medium focus:bg-muted/50 focus:text-celeste-kore cursor-pointer py-2">
-                        Orden alfabético
-                      </SelectItem>
-                    </SelectContent>
-                    </Select>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/kore/proyectos/mantenimiento")}
+                    onMouseEnter={() => setMantenimientoHovered(true)}
+                    onMouseLeave={() => setMantenimientoHovered(false)}
+                    className={`relative min-w-0 ${PROYECTOS_ACTION_BTN_CLASS}`}
+                  >
+                    <span className="truncate">MANTENIMIENTO</span>
+                    <DashboardMorphIcon
+                      icon={Wrench}
+                      iconActive={Hammer}
+                      size={16}
+                      className="text-white"
+                      engaged={mantenimientoHovered}
+                    />
+                    {hasPendingMaintenance ? (
+                      <span className="absolute -top-1 -right-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-background bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.8)]" />
+                    ) : null}
+                  </button>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 px-5 py-4">
-              <div className="relative flex-1 min-w-0">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Buscar por proyecto o cliente..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 transition-all placeholder:text-muted-foreground/50"
-                />
-              </div>
-
-              <div className="flex w-full items-center gap-2 shrink-0 lg:w-auto">
-                <div className="flex w-full items-center rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/60 overflow-hidden lg:w-auto">
+            <div className="px-5 py-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div
+                  className="relative min-w-0 flex-1"
+                  onMouseEnter={() => setSearchHovered(true)}
+                  onMouseLeave={() => setSearchHovered(false)}
+                >
+                  <DashboardMorphIcon
+                    icon={Search}
+                    iconActive={ScanSearch}
+                    size={16}
+                    className="text-muted-foreground"
+                    wrapperClassName="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2"
+                    engaged={searchHovered}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Buscar por proyecto o cliente..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-100 pl-10 pr-4 text-sm text-foreground transition-all placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 dark:border-zinc-700 dark:bg-zinc-800/80"
+                  />
+                </div>
+                <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
                   <button
                     type="button"
-                    onClick={() => setViewMode("lista")}
-                    className={`flex flex-1 lg:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors cursor-pointer ${viewMode === "lista" ? "bg-celeste-kore text-white" : "bg-transparent text-muted-foreground hover:text-celeste-kore"}`}
+                    onClick={() => router.push("/kore/proyectos/nuevo")}
+                    onMouseEnter={() => setNuevoHovered(true)}
+                    onMouseLeave={() => setNuevoHovered(false)}
+                    className={`flex-1 sm:flex-none ${PROYECTOS_ACTION_BTN_CLASS}`}
                   >
-                    <List size={14} />
-                    Lista
+                    <span>NUEVO</span>
+                    <DashboardMorphIcon
+                      icon={Plus}
+                      iconActive={CirclePlus}
+                      size={16}
+                      className="text-white"
+                      engaged={nuevoHovered}
+                    />
                   </button>
                   <button
                     type="button"
-                    onClick={() => setViewMode("tarjetas")}
-                    className={`flex flex-1 lg:flex-none items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors cursor-pointer border-l border-zinc-200 dark:border-zinc-700 ${viewMode === "tarjetas" ? "bg-celeste-kore text-white" : "bg-transparent text-muted-foreground hover:text-celeste-kore"}`}
+                    onClick={cycleSort}
+                    onMouseEnter={() => setSortHovered(true)}
+                    onMouseLeave={() => setSortHovered(false)}
+                    title={sortHovered ? nextSort.label : activeSort.label}
+                    aria-label={sortHovered ? `Siguiente: ${nextSort.label}` : activeSort.label}
+                    className={cn(
+                      "flex shrink-0 cursor-pointer flex-col items-center justify-center gap-0 bg-transparent py-0.5",
+                      PROYECTO_SORT_CONTROL_WIDTH_CLASS,
+                    )}
                   >
-                    <LayoutGrid size={14} />
-                    Tarjetas
+                    <MorphIcon
+                      icon={sortHovered ? nextSort.icon : activeSort.icon}
+                      size={28}
+                      strokeWidth={2.25}
+                      spring="snappy"
+                      className="text-celeste-kore sm:h-8 sm:w-8"
+                    />
+                    <span className="block w-full text-center text-[7px] font-bold uppercase leading-none tracking-tight text-celeste-kore/80 sm:text-[8px]">
+                      {sortHovered ? nextSort.shortLabel : activeSort.shortLabel}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -734,123 +947,141 @@ export default function DashboardProyectos() {
               </div>
             ) : (
               <>
-                {viewMode === "lista" ? (
-                  <div className="overflow-x-auto border-t border-zinc-200 dark:border-zinc-700/80">
-                    <table className="w-full min-w-[1100px] text-left text-xs border-collapse">
+                <div className="hidden overflow-x-auto border-t border-zinc-200 dark:border-zinc-700/80 lg:block">
+                    <table className="w-full table-fixed border-collapse text-left text-xs">
+                      <colgroup>
+                        <col className="w-[8%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[8%]" />
+                      </colgroup>
                       <thead className="bg-zinc-200/70 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700/80">
                         <tr className="text-[9px] text-celeste-kore uppercase tracking-widest">
-                          <th className="max-lg:sticky max-lg:left-0 max-lg:z-20 px-4 py-3 font-black whitespace-nowrap bg-zinc-200/70 dark:bg-zinc-800 max-lg:border-r max-lg:border-zinc-200 max-lg:dark:border-zinc-700/80 max-lg:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.15)]">Código</th>
-                          <th className="px-4 py-3 font-black whitespace-nowrap">Proyecto</th>
-                          <th className="px-4 py-3 font-black whitespace-nowrap">Cliente</th>
-                          <th className="px-4 py-3 font-black whitespace-nowrap">Estado</th>
-                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Precio</th>
-                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Comisión</th>
-                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Desarrollo</th>
-                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">IVA</th>
-                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Doc</th>
-                          <th className="px-4 py-3 font-black text-right whitespace-nowrap">Saldo Final</th>
+                          <th className="whitespace-nowrap px-3 py-3 font-black">Código</th>
+                          <th className="whitespace-nowrap px-3 py-3 font-black">Proyecto</th>
+                          <th className="whitespace-nowrap px-3 py-3 font-black">Cliente</th>
+                          <th className="whitespace-nowrap px-3 py-3 font-black">Creación</th>
+                          <th className="whitespace-nowrap px-3 py-3 font-black">Entrega</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-center font-black">Estado</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-right font-black">Precio</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-right font-black" aria-label="Acción" />
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedProyectos.map((p, rowIdx) => {
                           const precio = Number(p.precio) || 0;
-                          const comision = p.aplica_vendedor ? precio * (Number(p.porcentaje_vendedor) || 0) / 100 : 0;
-                          const desarrollo = p.aplica_desarrollo ? precio * (Number(p.porcentaje_desarrollo) || 0) / 100 : 0;
-                          const iva = p.aplica_iva ? precio * (Number(p.porcentaje_iva) || 0) / 100 : 0;
-                          const doc = p.aplica_doc ? precio * (Number(p.porcentaje_doc) || 0) / 100 : 0;
-                          const restante = precio - comision - desarrollo - iva - doc;
+                          const rowEngaged = hoveredRowId === p.id;
+                          const rowBg =
+                            rowIdx % 2 === 1
+                              ? "bg-zinc-100/40 dark:bg-zinc-800/25"
+                              : "bg-zinc-50 dark:bg-zinc-900";
+                          const rowHoverBg = "group-hover:bg-zinc-100 dark:group-hover:bg-zinc-800/60";
+                          const cellBg = `${rowBg} ${rowHoverBg}`;
 
                           return (
                             <tr
                               key={p.id}
+                              onMouseEnter={() => setHoveredRowId(p.id)}
+                              onMouseLeave={() => setHoveredRowId(null)}
                               onClick={() => {
-                                sessionStorage.setItem('selectedProyectoId', p.id);
-                                router.push('/kore/proyectos/ver');
+                                sessionStorage.setItem("selectedProyectoId", p.id);
+                                router.push(getProyectoVerPath(p));
                               }}
-                              className="group border-b border-zinc-200/80 dark:border-zinc-700/50 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 even:bg-zinc-100/40 dark:even:bg-zinc-800/25 odd:bg-transparent cursor-pointer transition-colors"
+                              className={`group border-b border-zinc-200/80 dark:border-zinc-700/50 last:border-0 cursor-pointer transition-colors ${cellBg}`}
                             >
-                              <td className={`max-lg:sticky max-lg:left-0 max-lg:z-10 px-4 py-3 font-mono text-[10px] whitespace-nowrap max-lg:border-r max-lg:border-zinc-200/80 max-lg:dark:border-zinc-700/50 max-lg:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.12)] ${rowIdx % 2 === 1 ? "max-lg:bg-zinc-100 max-lg:dark:bg-zinc-800/25" : "max-lg:bg-zinc-50 max-lg:dark:bg-zinc-900"} max-lg:group-hover:bg-zinc-100 max-lg:dark:group-hover:bg-zinc-800/60`}>
-                                <span className="font-bold text-celeste-kore bg-celeste-kore/10 px-1.5 py-0.5 rounded border border-celeste-kore/20">{getCode(p.id)}</span>
+                              <td className={`whitespace-nowrap px-3 py-3 font-mono text-[10px] ${cellBg}`}>
+                                <span className={cn("font-black", ROW_ACCENT_CLASS)}>{getCode(p.id)}</span>
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <p className="font-semibold text-black dark:text-white group-hover:text-celeste-kore transition-colors">{p.nombre}</p>
+                              <td className={`min-w-0 px-3 py-3 ${cellBg}`}>
+                                <p className={cn("truncate font-semibold", ROW_HOVER_TEXT_CLASS)}>{p.nombre}</p>
                               </td>
-                              <td className="px-4 py-3">
-                                <p className="font-semibold text-black dark:text-white whitespace-nowrap">{p.cliente_nombre || 'N/A'}</p>
-                                {p.cliente_telefono && (
-                                  <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-celeste-kore border border-celeste-kore/30 rounded-full px-2 py-0.5 bg-celeste-kore/10 whitespace-nowrap">
-                                    <Phone size={10} className="shrink-0" />
-                                    {formatPhoneDisplay(p.cliente_telefono)}
-                                  </span>
-                                )}
+                              <td className={`min-w-0 px-3 py-3 ${cellBg}`}>
+                                <p className={cn("truncate font-semibold", ROW_ACCENT_CLASS)}>
+                                  {p.cliente_nombre || "Sin cliente"}
+                                </p>
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${p.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
-                                    p.estado === 'Finalizados' ? 'bg-muted text-muted-foreground border-border' :
-                                      'bg-celeste-kore/5 text-celeste-kore/80 border-celeste-kore/15'
-                                  }`}>
-                                  {p.estado}
+                              <td className={`whitespace-nowrap px-3 py-3 ${cellBg}`}>
+                                <ProyectoTableFecha dateStr={p.created_at} />
+                              </td>
+                              <td className={`whitespace-nowrap px-3 py-3 ${cellBg}`}>
+                                <ProyectoTableFecha dateStr={p.fecha_entrega} />
+                              </td>
+                              <td className={`px-3 py-3 text-center ${cellBg}`}>
+                                <span
+                                  className={cn(
+                                    ESTADO_TABLE_BADGE_CLASS,
+                                    getEstadoProyectoBadgeClass(p.estado),
+                                    "group-hover:border-celeste-kore/25 group-hover:bg-celeste-kore/10 group-hover:text-celeste-kore",
+                                  )}
+                                >
+                                  {normalizeEstadoProyecto(p.estado)}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-right whitespace-nowrap">
-                                <p className="font-black text-black dark:text-white">Q{precio.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-                              </td>
-                              <td className="px-4 py-3 text-right whitespace-nowrap">
-                                <p className={`${comision > 0 ? 'text-celeste-kore font-bold' : 'text-muted-foreground'}`}>
-                                  {comision > 0 ? `Q${comision.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
+                              <td className={`whitespace-nowrap px-3 py-3 text-right ${cellBg}`}>
+                                <p className={cn("font-black", ROW_HOVER_TEXT_CLASS)}>
+                                  <span className={ROW_ACCENT_CLASS}>Q </span>
+                                  {precio.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                                 </p>
-                                {comision > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_vendedor}%</p>}
                               </td>
-                              <td className="px-4 py-3 text-right whitespace-nowrap">
-                                <p className={`${desarrollo > 0 ? 'text-celeste-kore font-bold' : 'text-muted-foreground'}`}>
-                                  {desarrollo > 0 ? `Q${desarrollo.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
-                                </p>
-                                {desarrollo > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_desarrollo}%</p>}
-                              </td>
-                              <td className="px-4 py-3 text-right whitespace-nowrap">
-                                <p className={`${iva > 0 ? 'text-black dark:text-white font-bold' : 'text-muted-foreground'}`}>
-                                  {iva > 0 ? `Q${iva.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
-                                </p>
-                                {iva > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_iva}%</p>}
-                              </td>
-                              <td className="px-4 py-3 text-right whitespace-nowrap">
-                                <p className={`${doc > 0 ? 'text-black dark:text-white font-bold' : 'text-muted-foreground'}`}>
-                                  {doc > 0 ? `Q${doc.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
-                                </p>
-                                {doc > 0 && <p className="text-[10px] text-black dark:text-white">{p.porcentaje_doc}%</p>}
-                              </td>
-                              <td className="px-4 py-3 text-right whitespace-nowrap">
-                                <p className="font-black text-celeste-kore">Q{restante.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                              <td className={`whitespace-nowrap px-3 py-3 text-right ${cellBg}`}>
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] transition-transform duration-300",
+                                    ROW_ACCENT_CLASS,
+                                    rowEngaged ? "translate-x-1" : "",
+                                  )}
+                                >
+                                  Entrar
+                                  <DashboardMorphIcon
+                                    icon={MoveRight}
+                                    iconActive={ArrowUpRight}
+                                    size={14}
+                                    strokeWidth={2.5}
+                                    className={ROW_ACCENT_CLASS}
+                                    engaged={rowEngaged}
+                                  />
+                                </span>
                               </td>
                             </tr>
                           );
                         })}
-                        {emptyRowsCount > 0 && Array.from({ length: emptyRowsCount }).map((_, idx) => (
-                          <tr key={`empty-${idx}`} className="opacity-0 pointer-events-none select-none">
-                            <td className={`max-lg:sticky max-lg:left-0 max-lg:z-10 px-4 py-3 max-lg:border-r max-lg:border-zinc-200/80 max-lg:dark:border-zinc-700/50 ${(paginatedProyectos.length + idx) % 2 === 1 ? "max-lg:bg-zinc-100 max-lg:dark:bg-zinc-800/25" : "max-lg:bg-zinc-50 max-lg:dark:bg-zinc-900"}`}><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                            <td className="px-4 py-3"><span>&nbsp;</span></td>
-                          </tr>
-                        ))}
+                        {emptyRowsCount > 0 && Array.from({ length: emptyRowsCount }).map((_, idx) => {
+                          const emptyRowBg =
+                            (paginatedProyectos.length + idx) % 2 === 1
+                              ? "bg-zinc-100/40 dark:bg-zinc-800/25"
+                              : "bg-zinc-50 dark:bg-zinc-900";
+
+                          return (
+                            <tr key={`empty-${idx}`} className="opacity-0 pointer-events-none select-none">
+                              <td className={`whitespace-nowrap px-3 py-3 ${emptyRowBg}`}>
+                                <span>&nbsp;</span>
+                              </td>
+                              <td className={`px-3 py-3 ${emptyRowBg}`}><span>&nbsp;</span></td>
+                              <td className={`px-3 py-3 ${emptyRowBg}`}><span>&nbsp;</span></td>
+                              <td className={`px-3 py-3 ${emptyRowBg}`}><span>&nbsp;</span></td>
+                              <td className={`px-3 py-3 ${emptyRowBg}`}><span>&nbsp;</span></td>
+                              <td className={`px-3 py-3 ${emptyRowBg}`}><span>&nbsp;</span></td>
+                              <td className={`px-3 py-3 ${emptyRowBg}`}><span>&nbsp;</span></td>
+                              <td className={`px-3 py-3 ${emptyRowBg}`}><span>&nbsp;</span></td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 p-5 border-t border-zinc-200 dark:border-zinc-700/80">
+
+                <div className="grid grid-cols-1 gap-3 border-t border-zinc-200 p-5 dark:border-zinc-700/80 lg:hidden">
                     {paginatedProyectos.map((p) => (
                       <div
                         key={p.id}
                         className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/60 p-3 flex flex-col gap-2 hover:border-celeste-kore/40 transition-all cursor-pointer group"
                         onClick={() => {
                           sessionStorage.setItem('selectedProyectoId', p.id);
-                          router.push('/kore/proyectos/ver');
+                          router.push(getProyectoVerPath(p));
                         }}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -861,166 +1092,307 @@ export default function DashboardProyectos() {
                           Cliente: <span className="font-semibold text-foreground">{p.cliente_nombre || 'Sin cliente'}</span>
                         </p>
                         <div className="flex items-center justify-between gap-2 mt-auto pt-1">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${p.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
-                              p.estado === 'Finalizados' ? 'bg-muted text-muted-foreground border-border' :
-                                'bg-celeste-kore/5 text-celeste-kore/80 border-celeste-kore/15'
-                            }`}>
-                            {p.estado}
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${getEstadoProyectoBadgeClass(p.estado)}`}>
+                            {normalizeEstadoProyecto(p.estado)}
                           </span>
                           <span className="text-xs font-black text-celeste-kore">Q{Number(p.precio || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     ))}
                   </div>
-                )}
 
-                <div className="flex items-center justify-center gap-2 px-5 py-4 border-t border-zinc-200 dark:border-zinc-700/80 bg-zinc-100/60 dark:bg-zinc-800/40">
-                  <button
-                    type="button"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    className="p-1 text-muted-foreground hover:text-celeste-kore disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <span className="text-sm font-medium text-foreground min-w-[40px] text-center select-none">
-                    {currentPage}/{totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                    className="p-1 text-muted-foreground hover:text-celeste-kore disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                  <Select
-                    value={String(itemsPerPage)}
-                    onValueChange={(val) => setItemsPerPage(Number(val))}
-                  >
-                    <SelectTrigger className="h-9 w-[72px] ml-2 bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 cursor-pointer outline-none px-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border/50 shadow-xl rounded-xl z-[200]">
-                      <SelectItem value="5" className="cursor-pointer">5</SelectItem>
-                      <SelectItem value="10" className="cursor-pointer">10</SelectItem>
-                      <SelectItem value="15" className="cursor-pointer">15</SelectItem>
-                      <SelectItem value="25" className="cursor-pointer">25</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="flex items-center justify-center gap-2 border-t border-zinc-200 bg-zinc-100/60 px-5 py-2 dark:border-zinc-700/80 dark:bg-zinc-800/40">
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                      className="cursor-pointer p-1 text-muted-foreground transition-colors hover:text-celeste-kore disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <DashboardMorphIcon icon={ChevronLeft} iconActive={ArrowLeft} size={18} className="text-current" />
+                    </button>
+                    <span className="min-w-10 select-none text-center text-sm font-medium text-foreground">
+                      {currentPage}/{totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                      className="cursor-pointer p-1 text-muted-foreground transition-colors hover:text-celeste-kore disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <DashboardMorphIcon icon={ChevronRight} iconActive={ArrowRight} size={18} className="text-current" />
+                    </button>
+                    <select
+                      value={itemsPerPage === "all" ? "all" : String(itemsPerPage)}
+                      onChange={(event) => {
+                        const val = event.target.value;
+                        if (val === "all") setItemsPerPage("all");
+                        else setItemsPerPage(Number(val) as 15 | 30 | 45);
+                      }}
+                      aria-label="Proyectos por página"
+                      className="h-8 min-w-14 cursor-pointer rounded-lg border border-zinc-300 bg-white px-2 text-center text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-celeste-kore/40 dark:border-zinc-600 dark:bg-zinc-800"
+                    >
+                      <option value="15">15</option>
+                      <option value="30">30</option>
+                      <option value="45">45</option>
+                      <option value="all">Todos</option>
+                    </select>
                 </div>
               </>
             )}
           </div>
 
           {/* CHARTS SECTION */}
-          <div className="grid grid-cols-1 lg:grid-cols-[38%_62%] gap-4">
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,7fr)] lg:items-stretch">
             {/* Donut Chart */}
-            <div className="rounded-2xl border border-celeste-kore/55 dark:border-border bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl p-4 sm:p-6 shadow-none dark:shadow-2xl dark:shadow-black/20 flex flex-col">
-              <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-4">
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-red-100 dark:bg-red-950/40 flex items-center justify-center border border-red-200 dark:border-red-900/30 shrink-0">
-                  <Briefcase size={14} className="text-celeste-kore" />
-                </div>
-                <h3 className="text-xs sm:text-sm font-black uppercase tracking-widest">Estado de Proyectos</h3>
+            <div
+              className="flex h-full min-w-0 flex-col rounded-2xl border border-celeste-kore/55 dark:border-border bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl p-4 sm:p-6 shadow-none dark:shadow-2xl dark:shadow-black/20"
+              onMouseEnter={() => setEstadoChartHovered(true)}
+              onMouseLeave={() => setEstadoChartHovered(false)}
+            >
+              <div className="mb-3 flex items-center gap-2 sm:mb-4 sm:gap-3">
+                <DashboardMorphIcon
+                  icon={FolderKanban}
+                  iconActive={LucidePieChart}
+                  size={22}
+                  strokeWidth={2}
+                  className="shrink-0 text-celeste-kore"
+                  engaged={estadoChartHovered}
+                />
+                <h3 className="text-xs font-black uppercase tracking-widest sm:text-sm">Estado de Proyectos</h3>
               </div>
 
-              <div className="flex-1 flex flex-row items-center justify-between w-full mt-2 gap-2 sm:gap-4">
-                {/* Left Side: States */}
-                <div className="flex-[1] min-w-0 flex flex-col gap-2.5 sm:gap-4 items-start text-left">
-                  {pieData.map((item) => (
-                    <div key={item.name} className="flex items-center gap-1.5 h-5 sm:h-6">
-                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }}></div>
-                      <span className="text-[9px] sm:text-xs font-bold text-muted-foreground uppercase truncate max-w-[75px] sm:max-w-none">{item.name}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Center: Donut Chart Graph */}
-                <div className="relative w-[110px] h-[110px] sm:w-[140px] sm:h-[140px] shrink-0">
-                  {pieData.length > 0 ? (
+              <div className="flex w-full min-w-0 flex-col gap-4">
+                <div className="relative mx-auto aspect-square w-full max-w-full">
+                  {summary.count > 0 && pieChartSegments.length > 0 ? (
                     <>
-                      <ResponsiveContainer width="100%" height="100%" className="absolute inset-0">
+                      <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={pieData}
-                            innerRadius="65%"
-                            outerRadius="85%"
-                            paddingAngle={5}
-                            cornerRadius={6}
+                            data={pieChartSegments}
+                            innerRadius="64%"
+                            outerRadius="90%"
+                            startAngle={90}
+                            endAngle={-270}
+                            paddingAngle={pieHasMultipleSegments ? 2 : 0}
                             dataKey="value"
                             stroke="none"
+                            isAnimationActive={false}
+                            shape={renderEstadoPieSector}
+                            onMouseEnter={(_: unknown, index: number) =>
+                              setHoveredEstadoSegment(pieChartSegments[index] ?? null)
+                            }
+                            onMouseLeave={() => setHoveredEstadoSegment(null)}
                           >
-                            {pieData.map((entry, index) => (
+                            {pieChartSegments.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                           </Pie>
                         </PieChart>
                       </ResponsiveContainer>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                        <span className="text-[8px] sm:text-[9px] uppercase tracking-widest text-muted-foreground font-black">Total</span>
-                        <span className="text-sm sm:text-lg font-black text-foreground">{summary.count}</span>
-                      </div>
+                      <motion.div
+                        layout
+                        transition={{ layout: ESTADO_PIE_MOTION }}
+                        className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
+                      >
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          {activeEstadoSegment ? (
+                            <motion.div
+                              key={activeEstadoSegment.name}
+                              layout
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -6 }}
+                              transition={{
+                                ...ESTADO_PIE_MOTION,
+                                layout: ESTADO_PIE_MOTION,
+                              }}
+                              className="mb-1.5 flex flex-col items-center gap-0.5"
+                            >
+                              <span className="max-w-[7rem] truncate text-[9px] font-black uppercase tracking-wider text-muted-foreground sm:max-w-[9rem]">
+                                {activeEstadoSegment.name}
+                              </span>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <span
+                                  className="text-sm font-black sm:text-base"
+                                  style={{ color: activeEstadoSegment.color }}
+                                >
+                                  {activeEstadoSegment.value}
+                                </span>
+                                <span
+                                  aria-hidden
+                                  className="size-1 shrink-0 rounded-full bg-muted-foreground/55"
+                                />
+                                <span className="text-sm font-black text-white sm:text-base">
+                                  {summary.count > 0
+                                    ? Math.round(
+                                        (activeEstadoSegment.value / summary.count) * 100,
+                                      )
+                                    : 0}
+                                  %
+                                </span>
+                              </div>
+                            </motion.div>
+                          ) : null}
+                        </AnimatePresence>
+                        <motion.span
+                          layout
+                          transition={{ layout: ESTADO_PIE_MOTION }}
+                          className="text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground sm:text-xs"
+                        >
+                          Total
+                        </motion.span>
+                        <motion.span
+                          layout
+                          transition={{ layout: ESTADO_PIE_MOTION }}
+                          className="text-3xl font-black leading-none text-foreground sm:text-4xl"
+                        >
+                          {summary.count}
+                        </motion.span>
+                      </motion.div>
                     </>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs sm:text-sm">No hay proyectos</div>
+                    <div className="flex h-full min-h-[180px] w-full items-center justify-center text-xs text-muted-foreground sm:text-sm">
+                      {summary.count > 0 ? null : "No hay proyectos"}
+                    </div>
                   )}
                 </div>
 
-                {/* Right Side: Numbers */}
-                <div className="flex-[1] min-w-0 flex flex-col gap-2.5 sm:gap-4 items-end text-right">
-                  {pieData.map((item) => (
-                    <div key={item.name} className="flex items-center justify-end gap-1.5 h-5 sm:h-6 shrink-0">
-                      {item.mant > 0 && (
-                        <span className="text-[8px] sm:text-[9px] font-black text-celeste-kore bg-celeste-kore/10 px-1 py-0.5 rounded border border-celeste-kore/20">
-                          Q{item.mant.toLocaleString()}
-                        </span>
+                <div className="flex w-full min-w-0 flex-col gap-2 border-t border-border/20 pt-3 sm:gap-2.5 sm:pt-4">
+                  {pieLegendItems.map((item) => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() =>
+                        setSelectedEstadoSegment((prev) =>
+                          prev?.name === item.name ? null : item,
+                        )
+                      }
+                      onMouseEnter={() => setHoveredEstadoSegment(item)}
+                      onMouseLeave={() => setHoveredEstadoSegment(null)}
+                      className={cn(
+                        "flex min-w-0 w-full items-center justify-between gap-3 rounded-xl bg-muted/20 px-3.5 py-2.5 text-left transition-all duration-300 cursor-pointer sm:px-4",
+                        activeEstadoSegment?.name === item.name &&
+                          "font-black shadow-sm",
                       )}
-                      <div className="text-[9px] sm:text-xs font-black">
-                        {item.value} <span className="text-muted-foreground font-bold">— {Math.round((item.value / Math.max(1, summary.count)) * 100)}%</span>
+                      style={
+                        activeEstadoSegment?.name === item.name
+                          ? {
+                              backgroundColor: `color-mix(in srgb, ${item.color} 18%, transparent)`,
+                              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${item.color} 42%, transparent)`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div
+                          className="h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5"
+                          style={{
+                            backgroundColor: item.color,
+                            ...(activeEstadoSegment?.name === item.name
+                              ? {
+                                  boxShadow: `0 0 0 2px color-mix(in srgb, ${item.color} 40%, transparent)`,
+                                }
+                              : {}),
+                          }}
+                        />
+                        <span
+                          className={cn(
+                            "truncate text-[11px] sm:text-xs",
+                            activeEstadoSegment?.name === item.name
+                              ? "font-black text-foreground"
+                              : "font-semibold text-muted-foreground",
+                          )}
+                        >
+                          {item.name}
+                        </span>
                       </div>
-                    </div>
+                      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                        {item.mant > 0 ? (
+                          <span className="rounded border border-celeste-kore/20 bg-celeste-kore/10 px-1 py-0.5 text-[8px] font-black text-celeste-kore sm:text-[9px]">
+                            Q{item.mant.toLocaleString()}
+                          </span>
+                        ) : null}
+                        <span className="text-[10px] font-black sm:text-xs">
+                          {item.value}{" "}
+                          <span className="font-bold text-muted-foreground">
+                            — {summary.count > 0 ? Math.round((item.value / summary.count) * 100) : 0}%
+                          </span>
+                        </span>
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>
             </div>
 
             {/* Bar Chart */}
-            <div className="rounded-2xl border border-celeste-kore/55 dark:border-border bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl p-4 sm:p-6 shadow-none dark:shadow-2xl dark:shadow-black/20">
+            <div
+              className="flex min-h-0 flex-col rounded-2xl border border-celeste-kore/55 dark:border-border bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl p-4 sm:p-6 shadow-none dark:shadow-2xl dark:shadow-black/20 lg:h-full"
+              onMouseEnter={() => setIngresoHeaderHovered(true)}
+              onMouseLeave={() => setIngresoHeaderHovered(false)}
+            >
 
-              {/* First Line: INGRESO & SWITCH */}
-              <div className="flex items-center justify-between mb-4 gap-3">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-red-100 dark:bg-red-950/40 flex items-center justify-center border border-red-200 dark:border-red-900/30 shrink-0">
-                    <CircleDollarSign size={14} className="text-celeste-kore" />
+              <div className="mb-4 flex shrink-0 min-w-0 flex-col gap-3 overflow-visible lg:gap-2">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <DashboardMorphIcon
+                      icon={CircleDollarSign}
+                      iconActive={BarChart3}
+                      size={22}
+                      strokeWidth={2}
+                      className="shrink-0 text-celeste-kore"
+                      engaged={ingresoHeaderHovered}
+                    />
+                    <h3 className="whitespace-nowrap text-xs font-black uppercase tracking-widest text-foreground sm:text-sm">
+                      Ingreso
+                    </h3>
                   </div>
-                  <h3 className="text-xs sm:text-sm font-black uppercase tracking-widest text-foreground">
-                    Ingreso
-                  </h3>
-                </div>
-                <div className="flex items-center rounded-full bg-muted/30 border border-border/30 p-[2px]">
-                  {["MES", "AÑO", "RANGO"].map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setChartTab(tab as "MES" | "AÑO" | "RANGO")}
-                      className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold transition-all cursor-pointer ${chartTab === tab
-                          ? "bg-celeste-kore text-white shadow-md"
-                          : "text-muted-foreground hover:bg-muted/50"
-                        }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
-              {/* Second Line: Active Filters (Centered) */}
-              <div className="flex items-center justify-center w-full min-h-[40px] mt-2 mb-4">
-                {chartTab === "MES" && (
-                  <div className="flex flex-row items-center gap-2 sm:gap-3 w-full sm:w-auto relative">
-                    {/* Month Picker Segmented Controller */}
-                    <div className="relative w-1/2 sm:w-auto flex-1 sm:flex-initial min-w-0">
-                      <div className="flex items-center bg-muted/20 border border-border/40 rounded-xl overflow-hidden w-full transition-all h-8 sm:h-9">
-                        {/* Prev Month Button */}
+                  <div className="relative flex shrink-0 items-center rounded-full border border-border/30 bg-muted/30 p-1">
+                    {(["MES", "AÑO", "RANGO"] as const).map((tab) => {
+                      const isActive = chartTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setChartTab(tab)}
+                          className="relative cursor-pointer rounded-full px-2.5 py-1 text-[8px] font-bold leading-none tracking-tight sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-normal"
+                        >
+                          {isActive ? (
+                            <motion.span
+                              layoutId="ingreso-chart-tab-pill"
+                              className="absolute inset-0 rounded-full bg-celeste-kore shadow-md"
+                              transition={ESTADO_PIE_MOTION}
+                            />
+                          ) : null}
+                          <span
+                            className={cn(
+                              "relative z-10 transition-colors duration-300",
+                              isActive
+                                ? "text-white"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {tab}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex w-full min-w-0 items-center justify-center overflow-visible lg:justify-end">
+                  <AnimatePresence mode="wait" initial={false}>
+                    {chartTab === "MES" && (
+                      <motion.div
+                        key="chart-filter-mes"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={ESTADO_PIE_MOTION}
+                        className="relative z-20 mx-auto min-w-0 w-full max-w-[220px] shrink overflow-visible sm:mx-0 sm:max-w-none sm:w-auto"
+                      >
+                      <div className="flex h-8 min-w-0 items-center overflow-hidden rounded-xl border border-border/40 bg-muted/20 transition-all sm:h-9">
                         <button
                           type="button"
                           onClick={() => {
@@ -1030,22 +1402,21 @@ export default function DashboardProyectos() {
                             } else {
                               setSelectedMonth((m) => m - 1);
                             }
-                            setSelectedWeekIndex(null);
                           }}
-                          className="h-full px-1.5 sm:px-3 hover:bg-muted/30 border-r border-border/40 text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                          className="flex h-full shrink-0 cursor-pointer items-center justify-center border-r border-border/40 px-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground sm:px-2"
                           title="Mes anterior"
                         >
-                          <ChevronLeft size={11} className="sm:w-3.5 sm:h-3.5" />
+                          <DashboardMorphIcon icon={ChevronLeft} iconActive={ArrowLeft} size={11} className="text-current sm:h-3.5 sm:w-3.5" />
                         </button>
 
-                        {/* Middle Month Picker Trigger */}
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setTempYear(selectedYear);
-                            setShowMonthPicker(!showMonthPicker);
+                            setShowMonthPicker((open) => !open);
                           }}
-                          className="filter-button h-full flex-1 flex items-center justify-center gap-1 px-1 sm:px-2 font-black uppercase tracking-widest text-foreground hover:bg-muted/30 transition-colors cursor-pointer min-w-0 overflow-hidden"
+                          className="filter-button flex h-full min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 overflow-hidden px-1 font-black uppercase tracking-widest text-foreground transition-colors hover:bg-muted/30 sm:px-2"
                         >
                           <AnimatePresence mode="wait" initial={false}>
                             <motion.span
@@ -1054,15 +1425,20 @@ export default function DashboardProyectos() {
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: -8 }}
                               transition={{ duration: 0.18, ease: "easeOut" }}
-                              className="truncate"
+                              className="truncate text-[10px] sm:text-[11px]"
                             >
-                              {`${monthsFull[selectedMonth]} ${selectedYear}`}
+                              {`${monthsAbbr[selectedMonth].toUpperCase()} ${selectedYear}`}
                             </motion.span>
                           </AnimatePresence>
-                          <ChevronDown size={10} className="text-muted-foreground shrink-0" />
+                          <DashboardMorphIcon
+                            icon={ChevronDown}
+                            iconActive={ChevronUp}
+                            size={10}
+                            className="text-muted-foreground"
+                            engaged={showMonthPicker}
+                          />
                         </button>
 
-                        {/* Next Month Button */}
                         <button
                           type="button"
                           onClick={() => {
@@ -1072,45 +1448,42 @@ export default function DashboardProyectos() {
                             } else {
                               setSelectedMonth((m) => m + 1);
                             }
-                            setSelectedWeekIndex(null);
                           }}
-                          className="h-full px-1.5 sm:px-3 hover:bg-muted/30 border-l border-border/40 text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                          className="flex h-full shrink-0 cursor-pointer items-center justify-center border-l border-border/40 px-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground sm:px-2"
                           title="Siguiente mes"
                         >
-                          <ChevronRight size={11} className="sm:w-3.5 sm:h-3.5" />
+                          <DashboardMorphIcon icon={ChevronRight} iconActive={ArrowRight} size={11} className="text-current sm:h-3.5 sm:w-3.5" />
                         </button>
                       </div>
 
                       <AnimatePresence>
                         {showMonthPicker && (
                           <>
-                            {/* Backdrop to close */}
                             <motion.div
-                              className="fixed inset-0 z-40 bg-transparent"
+                              className="fixed inset-0 z-[190] bg-transparent"
                               onClick={() => setShowMonthPicker(false)}
                               initial={{ opacity: 0 }}
                               animate={{ opacity: 1 }}
                               exit={{ opacity: 0 }}
                               transition={{ duration: 0.15 }}
                             />
-
-                            {/* Floating Card */}
                             <motion.div
-                              className="absolute top-full left-0 mt-2 z-50 w-[240px] bg-card border border-border rounded-2xl shadow-xl p-4 flex flex-col gap-3"
+                              className="absolute top-full left-1/2 z-[200] mt-2 flex w-[240px] -translate-x-1/2 flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-xl lg:left-auto lg:right-0 lg:translate-x-0"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
                               initial={{ opacity: 0, scale: 0.92, y: -8 }}
                               animate={{ opacity: 1, scale: 1, y: 0 }}
                               exit={{ opacity: 0, scale: 0.92, y: -8 }}
                               transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                              style={{ originX: 0, originY: 0 }}
+                              style={{ originX: 1, originY: 0 }}
                             >
-                              {/* Year Navigation Header */}
                               <div className="flex items-center justify-between">
                                 <button
                                   type="button"
-                                  onClick={() => setTempYear(prev => prev - 1)}
-                                  className="p-1 hover:bg-muted/50 rounded-lg text-foreground transition-colors cursor-pointer"
+                                  onClick={() => setTempYear((prev) => prev - 1)}
+                                  className="cursor-pointer rounded-lg p-1 text-foreground transition-colors hover:bg-muted/50"
                                 >
-                                  <ChevronLeft size={16} />
+                                  <DashboardMorphIcon icon={ChevronLeft} iconActive={ArrowLeft} size={16} className="text-current" />
                                 </button>
                                 <AnimatePresence mode="wait" initial={false}>
                                   <motion.span
@@ -1126,14 +1499,13 @@ export default function DashboardProyectos() {
                                 </AnimatePresence>
                                 <button
                                   type="button"
-                                  onClick={() => setTempYear(prev => prev + 1)}
-                                  className="p-1 hover:bg-muted/50 rounded-lg text-foreground transition-colors cursor-pointer"
+                                  onClick={() => setTempYear((prev) => prev + 1)}
+                                  className="cursor-pointer rounded-lg p-1 text-foreground transition-colors hover:bg-muted/50"
                                 >
-                                  <ChevronRight size={16} />
+                                  <DashboardMorphIcon icon={ChevronRight} iconActive={ArrowRight} size={16} className="text-current" />
                                 </button>
                               </div>
 
-                              {/* 3x4 Month Grid */}
                               <div className="grid grid-cols-3 gap-2">
                                 {monthsAbbr.map((m, idx) => {
                                   const isSelected = selectedMonth === idx && selectedYear === tempYear;
@@ -1144,12 +1516,11 @@ export default function DashboardProyectos() {
                                       onClick={() => {
                                         setSelectedMonth(idx);
                                         setSelectedYear(tempYear);
-                                        setSelectedWeekIndex(null);
                                         setShowMonthPicker(false);
                                       }}
                                       whileHover={{ scale: 1.08 }}
                                       whileTap={{ scale: 0.95 }}
-                                      className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${isSelected
+                                      className={`cursor-pointer rounded-lg py-2 text-xs font-bold transition-all ${isSelected
                                           ? "bg-celeste-kore text-white shadow-md"
                                           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                                         }`}
@@ -1163,99 +1534,31 @@ export default function DashboardProyectos() {
                           </>
                         )}
                       </AnimatePresence>
+                    </motion.div>
+                    )}
 
-                    </div>
-
-                    {/* Week Picker Trigger */}
-                    <div className="relative w-1/2 sm:w-auto flex-1 sm:flex-initial min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => setShowWeekPicker(!showWeekPicker)}
-                        className="filter-button w-full h-8 sm:h-9 flex items-center justify-between gap-1.5 px-3 bg-muted/20 border border-border/40 rounded-xl font-black uppercase tracking-widest text-foreground hover:bg-muted/30 transition-all cursor-pointer"
+                    {chartTab === "AÑO" && (
+                      <motion.div
+                        key="chart-filter-anio"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={ESTADO_PIE_MOTION}
+                        className="relative z-20 mx-auto shrink-0 overflow-visible lg:mx-0"
                       >
-                        <span className="truncate">
-                          {selectedWeekIndex !== null
-                            ? getWeeksOfMonth(selectedYear, selectedMonth)[selectedWeekIndex]?.label
-                            : "Todas las semanas"}
-                        </span>
-                        <ChevronDown size={10} className="text-muted-foreground shrink-0" />
-                      </button>
-
-                      <AnimatePresence>
-                        {showWeekPicker && (
-                          <>
-                            <motion.div
-                              className="fixed inset-0 z-40 bg-transparent"
-                              onClick={() => setShowWeekPicker(false)}
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              transition={{ duration: 0.15 }}
-                            />
-                            <motion.div
-                              className="absolute top-full mt-2 z-50 w-[200px] bg-card border border-border rounded-2xl shadow-xl p-3 flex flex-col gap-1"
-                              initial={{ opacity: 0, scale: 0.92, y: -8, x: "-50%" }}
-                              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
-                              exit={{ opacity: 0, scale: 0.92, y: -8, x: "-50%" }}
-                              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                              style={{ left: "50%", originX: 0.5, originY: 0 }}
-                            >
-                              {/* Option: Todas las semanas */}
-                              <motion.button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedWeekIndex(null);
-                                  setShowWeekPicker(false);
-                                }}
-                                whileHover={{ scale: 1.02, x: 2 }}
-                                whileTap={{ scale: 0.98 }}
-                                className={`w-full py-2 px-3 text-left text-xs font-black rounded-lg transition-all cursor-pointer ${selectedWeekIndex === null
-                                    ? "bg-celeste-kore text-white shadow-md"
-                                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                                  }`}
-                              >
-                                TODAS LAS SEMANAS
-                              </motion.button>
-
-                              {/* Weeks Options */}
-                              {getWeeksOfMonth(selectedYear, selectedMonth).map((w, idx) => {
-                                const isSelected = selectedWeekIndex === idx;
-                                return (
-                                  <motion.button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedWeekIndex(idx);
-                                      setShowWeekPicker(false);
-                                    }}
-                                    whileHover={{ scale: 1.02, x: 2 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    className={`w-full py-2 px-3 text-left text-xs font-black rounded-lg transition-all cursor-pointer ${isSelected
-                                        ? "bg-celeste-kore text-white shadow-md"
-                                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                                      }`}
-                                  >
-                                    {w.label}
-                                  </motion.button>
-                                );
-                              })}
-                            </motion.div>
-                          </>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                )}
-
-                {chartTab === "AÑO" && (
-                  <div className="relative">
                     <button
                       type="button"
                       onClick={() => setShowYearPicker(!showYearPicker)}
                       className="filter-button h-8 sm:h-9 flex items-center justify-center gap-1.5 px-4 bg-muted/20 border border-border/40 rounded-xl font-black uppercase tracking-widest text-foreground hover:bg-muted/30 transition-colors cursor-pointer"
                     >
                       <span>{selectedYear}</span>
-                      <ChevronDown size={10} className="text-muted-foreground shrink-0" />
+                      <DashboardMorphIcon
+                        icon={ChevronDown}
+                        iconActive={ChevronUp}
+                        size={10}
+                        className="text-muted-foreground"
+                        engaged={showYearPicker}
+                      />
                     </button>
 
                     <AnimatePresence>
@@ -1301,195 +1604,106 @@ export default function DashboardProyectos() {
                         </>
                       )}
                     </AnimatePresence>
-                  </div>
-                )}
+                      </motion.div>
+                    )}
 
-                {chartTab === "RANGO" && (
-                  <div className="relative w-full sm:w-auto flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2">
-                    {/* Start Date Button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (showRangePicker && rangeActiveField === "start") {
-                          setShowRangePicker(false);
-                        } else {
-                          setRangeActiveField("start");
-                          const initialDate = dateRange.start ? new Date(dateRange.start + "T00:00:00") : new Date();
-                          setViewingMonth(initialDate.getMonth());
-                          setViewingYear(initialDate.getFullYear());
-                          setShowRangePicker(true);
-                        }
-                      }}
-                      className="filter-button h-8 sm:h-9 px-3 flex items-center justify-between gap-3 rounded-xl bg-muted/20 border border-border/40 hover:bg-muted/30 text-foreground transition-all cursor-pointer font-black text-[10px] sm:text-xs tracking-widest"
-                    >
-                      <span>{formatDateSlash(dateRange.start)}</span>
-                      <Calendar size={12} className="text-muted-foreground shrink-0" />
-                    </button>
-
-                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-muted-foreground select-none">al</span>
-
-                    {/* End Date Button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (showRangePicker && rangeActiveField === "end") {
-                          setShowRangePicker(false);
-                        } else {
-                          setRangeActiveField("end");
-                          const initialDate = dateRange.end ? new Date(dateRange.end + "T00:00:00") : new Date();
-                          setViewingMonth(initialDate.getMonth());
-                          setViewingYear(initialDate.getFullYear());
-                          setShowRangePicker(true);
-                        }
-                      }}
-                      className="filter-button h-8 sm:h-9 px-3 flex items-center justify-between gap-3 rounded-xl bg-muted/20 border border-border/40 hover:bg-muted/30 text-foreground transition-all cursor-pointer font-black text-[10px] sm:text-xs tracking-widest"
-                    >
-                      <span>{formatDateSlash(dateRange.end)}</span>
-                      <Calendar size={12} className="text-muted-foreground shrink-0" />
-                    </button>
-
-                    <AnimatePresence>
-                      {showRangePicker && (
-                        <>
-                          <motion.div
-                            className="fixed inset-0 z-40 bg-transparent"
-                            onClick={() => setShowRangePicker(false)}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                          />
-                          <motion.div
-                            className="absolute top-full mt-2 z-50 w-[260px] bg-card border border-border rounded-2xl shadow-xl p-4 flex flex-col gap-3"
-                            initial={{ opacity: 0, scale: 0.92, y: -8, x: "-50%" }}
-                            animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
-                            exit={{ opacity: 0, scale: 0.92, y: -8, x: "-50%" }}
-                            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                            style={{ left: "50%", originX: 0.5, originY: 0 }}
-                          >
-                            {/* Calendar Month Header */}
-                            <div className="flex items-center justify-between">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (viewingMonth === 0) {
-                                    setViewingMonth(11);
-                                    setViewingYear((y) => y - 1);
-                                  } else {
-                                    setViewingMonth((m) => m - 1);
-                                  }
-                                }}
-                                className="p-1 hover:bg-muted/50 rounded-lg text-foreground transition-colors cursor-pointer"
-                              >
-                                <ChevronLeft size={16} />
-                              </button>
-                              <span className="text-sm font-black uppercase text-foreground">
-                                {`${monthsFull[viewingMonth]} ${viewingYear}`}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (viewingMonth === 11) {
-                                    setViewingMonth(0);
-                                    setViewingYear((y) => y + 1);
-                                  } else {
-                                    setViewingMonth((m) => m + 1);
-                                  }
-                                }}
-                                className="p-1 hover:bg-muted/50 rounded-lg text-foreground transition-colors cursor-pointer"
-                              >
-                                <ChevronRight size={16} />
-                              </button>
-                            </div>
-
-                            {/* Calendar Days Header */}
-                            <div className="grid grid-cols-7 gap-1 text-center mb-1 border-b border-border/30 pb-1">
-                              {["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"].map((d) => (
-                                <span key={d} className="text-[9px] font-black text-muted-foreground uppercase">
-                                  {d}
-                                </span>
-                              ))}
-                            </div>
-
-                            {/* Calendar Days Grid */}
-                            <div className="grid grid-cols-7 gap-1">
-                              {getDaysInMonthGrid(viewingYear, viewingMonth).map((day, idx) => {
-                                if (!day) return <div key={`empty-${idx}`} className="w-7 h-7" />;
-
-                                const isSelected = rangeActiveField === "start"
-                                  ? dateRange.start === day.dateStr
-                                  : dateRange.end === day.dateStr;
-
-                                return (
-                                  <motion.button
-                                    key={day.dateStr}
-                                    type="button"
-                                    onClick={() => handleDayClick(day.dateStr)}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    className={`w-7 h-7 flex items-center justify-center text-[10px] font-bold rounded-lg transition-all cursor-pointer ${isSelected
-                                        ? "bg-celeste-kore text-white shadow-md font-black"
-                                        : "text-foreground hover:bg-muted/50"
-                                      }`}
-                                  >
-                                    {day.dayNum}
-                                  </motion.button>
-                                );
-                              })}
-                            </div>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-sm bg-celeste-kore"></div>
-                  <span className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Precio total</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-sm bg-[#3D3C3C]"></div>
-                  <span className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Comisión</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-sm bg-muted-foreground/40"></div>
-                  <span className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">IVA</span>
+                    {chartTab === "RANGO" && (
+                      <motion.div
+                        key="chart-filter-rango"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={ESTADO_PIE_MOTION}
+                        className="mx-auto flex shrink-0 flex-wrap items-center justify-center gap-2 lg:mx-0 lg:justify-end"
+                      >
+                        <RangeDateSegmentInput
+                          value={dateRange.start}
+                          onCommit={commitRangeStart}
+                          aria-label="Fecha inicio"
+                        />
+                        <span
+                          aria-hidden
+                          className="text-[10px] font-bold text-muted-foreground/70 sm:text-[11px]"
+                        >
+                          —
+                        </span>
+                        <RangeDateSegmentInput
+                          value={dateRange.end}
+                          onCommit={commitRangeEnd}
+                          aria-label="Fecha fin"
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 
-              <div className="h-[200px] sm:h-[250px] w-full">
-                {barData.length > 0 ? (
+              <div className="mb-3 flex w-full shrink-0 flex-wrap items-center justify-center gap-4 sm:mb-4 sm:gap-5">
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="h-2 w-2 rounded-sm sm:h-2.5 sm:w-2.5"
+                    style={{ backgroundColor: INGRESO_BAR_PRECIO_COLOR }}
+                  />
+                  <span className="text-[9px] font-bold uppercase text-muted-foreground sm:text-[10px]">Precio total</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="h-2 w-2 rounded-sm sm:h-2.5 sm:w-2.5"
+                    style={{ backgroundColor: INGRESO_BAR_COMISION_COLOR }}
+                  />
+                  <span className="text-[9px] font-bold uppercase text-muted-foreground sm:text-[10px]">Comisión</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="h-2 w-2 rounded-sm sm:h-2.5 sm:w-2.5"
+                    style={{ backgroundColor: INGRESO_BAR_IVA_COLOR }}
+                  />
+                  <span className="text-[9px] font-bold uppercase text-muted-foreground sm:text-[10px]">IVA</span>
+                </div>
+              </div>
+
+              <div className="min-h-[220px] w-full min-w-0 flex-1 overflow-hidden sm:min-h-[260px] lg:min-h-0">
+                {chartBarData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <BarChart
+                      data={chartBarData}
+                      barGap={-INGRESO_BAR_SIZE}
+                      margin={{ top: 10, right: 4, left: -18, bottom: 0 }}
+                    >
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#71717a" }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#71717a" }} tickFormatter={(val) => `Q${val / 1000}k`} dy={-8} />
-                      <RechartsTooltip
-                        cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                        contentStyle={{
-                          backgroundColor: "#18181b",
-                          borderColor: "rgba(255,255,255,0.1)",
-                          borderRadius: "12px",
-                          fontSize: "12px",
-                          color: "#fff",
-                          boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)"
-                        }}
-                        itemStyle={{ color: "#fff" }}
-                        separator=""
-                        formatter={(value: number | string | Array<number | string> | undefined, name: number | string | undefined) => {
-                          const formattedValue = typeof value === "number"
-                            ? value.toLocaleString()
-                            : String(value ?? "");
-                          if (name === "comision") return [formattedValue, "Comisión: Q "] as [string, string];
-                          if (name === "iva") return [formattedValue, "IVA: Q "] as [string, string];
-                          if (name === "precio") return [formattedValue, "Precio; Q "] as [string, string];
-                          return [formattedValue, String(name ?? "")] as [string, string];
+                      <YAxis
+                        width={28}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 8, fill: "#71717a" }}
+                        tickFormatter={(val) => {
+                          if (val === 0) return "0";
+                          const k = val / 1000;
+                          return Number.isInteger(k) ? `${k}k` : `${k.toFixed(1)}k`;
                         }}
                       />
-                      <Bar dataKey="precio" stackId="a" fill="#B7494E" radius={[8, 8, 0, 0]} barSize={20} />
-                      <Bar dataKey="comision" stackId="a" fill="#3D3C3C" radius={[8, 8, 0, 0]} barSize={20} />
-                      <Bar dataKey="iva" stackId="a" fill="#a1a1aa" radius={[8, 8, 0, 0]} barSize={20} />
+                      <RechartsTooltip
+                        cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                        content={IngresoBarTooltip}
+                      />
+                      <Bar
+                        dataKey="neto"
+                        fill={INGRESO_BAR_PRECIO_COLOR}
+                        barSize={INGRESO_BAR_SIZE}
+                        shape={IngresoOverlayBarShape}
+                      />
+                      <Bar
+                        dataKey="iva"
+                        fill={INGRESO_BAR_IVA_COLOR}
+                        barSize={INGRESO_BAR_SIZE}
+                        shape={IngresoOverlayBarShape}
+                      />
+                      <Bar
+                        dataKey="comision"
+                        fill={INGRESO_BAR_COMISION_COLOR}
+                        barSize={INGRESO_BAR_SIZE}
+                        shape={IngresoOverlayBarShape}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1508,7 +1722,7 @@ export default function DashboardProyectos() {
         <div className="rounded-2xl border border-celeste-kore/30 dark:border-border bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl p-6 shadow-none dark:shadow-2xl dark:shadow-black/20">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-950/40 flex items-center justify-center border border-red-200 dark:border-red-900/30 shrink-0">
-              <CalendarDays size={16} className="text-celeste-kore" />
+              <DashboardMorphIcon icon={CalendarDays} iconActive={Calendar} size={16} className="text-celeste-kore" />
             </div>
             <div>
               <h3 className="text-sm font-black uppercase tracking-widest">Fechas de Entrega</h3>

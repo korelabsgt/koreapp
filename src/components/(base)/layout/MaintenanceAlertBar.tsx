@@ -89,12 +89,11 @@ export function MaintenanceAlertBar() {
       {isVisible && (
         <motion.div
           key="maintenance-alert-bar"
-          initial={{ y: -48, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -48, opacity: 0 }}
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="fixed left-0 w-full z-[98] bg-gradient-to-r from-amber-500/95 via-amber-400/95 to-amber-500/95 backdrop-blur-md border-b border-amber-300/30 shadow-lg shadow-amber-500/20"
-          style={{ top: "var(--header-height, 56px)" }}
+          className="relative z-[98] w-full overflow-hidden bg-gradient-to-r from-amber-500/95 via-amber-400/95 to-amber-500/95 border-b border-amber-300/30 shadow-lg shadow-amber-500/20"
         >
           <div className="max-w-7xl mx-auto px-4 md:px-8 h-10 flex items-center justify-between gap-3">
             {/* Icon + message */}

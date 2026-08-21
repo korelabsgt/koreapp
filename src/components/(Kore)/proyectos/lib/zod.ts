@@ -19,6 +19,16 @@ export const deduccionItemSchema = z.object({
 
 export type DeduccionItem = z.infer<typeof deduccionItemSchema>;
 
+export const ESTADOS_PROYECTO = ["En progreso", "Activo", "En pausa"] as const;
+export type EstadoProyecto = (typeof ESTADOS_PROYECTO)[number];
+
+export function normalizeEstadoProyecto(raw: string | null | undefined): EstadoProyecto {
+  const value = (raw ?? "").trim().toLowerCase();
+  if (value === "activo" || value === "finalizados" || value === "finalizado") return "Activo";
+  if (value === "en pausa" || value === "enpausa") return "En pausa";
+  return "En progreso";
+}
+
 export const proyectoSchema = z.object({
   nombre: z.string().min(1, "El nombre del proyecto es requerido"),
   // Cliente
@@ -37,7 +47,7 @@ export const proyectoSchema = z.object({
     z.coerce.number().min(0, "El monto de mantenimiento no puede ser negativo").optional()
   ),
   mantenimiento_fecha_cobro: z.string().optional().or(z.literal("")),
-  estado: z.string().default("En Progreso"),
+  estado: z.string().default("En progreso"),
   // Vendedor (usuario registrado que lleva la comisión principal) - Opcional, pero lo mantenemos para backward compat si se necesita o lo usamos de primer vendedor
   vendedor_id: z.string().optional().or(z.literal("")).default(""),
   // Deducciones: lista dinámica

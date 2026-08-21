@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import ProyectoDetalle from "@/components/(Kore)/proyectos/ProyectoDetalle/ProyectoDetalle";
+import ProyectoVerRedirect from "@/components/(Kore)/proyectos/ProyectoVerRedirect";
 
-export default function ProyectoDetallePage() {
+export default function ProyectoVerLegacyPage() {
   return (
     <Suspense>
-      <ProyectoDetalle />
+      <ProyectoVerRedirect />
     </Suspense>
   );
 }

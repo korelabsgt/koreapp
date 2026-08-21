@@ -1,42 +1,65 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { CrearClienteModal } from "@/components/(Kore)/clientes/forms/CrearClienteModal";
 import {
-  Loader2,
-  Briefcase,
-  Save,
-  Plus,
-  Trash2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import Swal from "sweetalert2";
-import { UseFormSetValue, UseFormRegister, FieldErrors, Resolver } from "react-hook-form";
+  getProyectoCode,
+  getProyectoEditarPath,
+  getProyectoPathSegment,
+  matchProyectoFromPathSegment,
+} from "@/components/(Kore)/proyectos/lib/helpers";
 import {
-  proyectoSchema,
+  useCreateProyecto,
+  useProyectos,
+  useUpdateProyecto,
+} from "@/components/(Kore)/proyectos/lib/hooks";
+import {
+  Cliente,
+  DeduccionItem,
+  ESTADOS_PROYECTO,
+  Profile,
+  Proyecto,
   ProyectoFormValues,
   TIPOS_DEDUCCION,
   TipoDeduccion,
-  Proyecto,
-  Profile,
-  Cliente,
-  DeduccionItem
+  normalizeEstadoProyecto,
+  proyectoSchema,
 } from "@/components/(Kore)/proyectos/lib/zod";
-import { useProyectos, useCreateProyecto, useUpdateProyecto } from "@/components/(Kore)/proyectos/lib/hooks";
 import { useUserContext } from "@/components/(base)/providers/UserProvider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter, usePathname } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Briefcase,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+} from "lucide-react";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  FieldErrors,
+  Resolver,
+  UseFormRegister,
+  UseFormSetValue,
+  useFieldArray,
+  useForm,
+} from "react-hook-form";
+import Swal from "sweetalert2";
 import QRProyecto from "../QRProyecto/QRProyecto";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CrearClienteModal } from "@/components/(Kore)/clientes/forms/CrearClienteModal";
-
 
 interface ProyectoFormProps {
   proyecto?: Proyecto | null;
@@ -44,23 +67,28 @@ interface ProyectoFormProps {
 
 // ── Small shared components ──────────────────────────────────────────────────
 
-
-const Label = ({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) => (
+const Label = ({
+  className,
+  ...props
+}: React.LabelHTMLAttributes<HTMLLabelElement>) => (
   <label
     {...props}
     className={cn(
       "text-xs font-semibold leading-none text-foreground/70 uppercase tracking-wider",
-      className
+      className,
     )}
   />
 );
 
-const Input = ({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) => (
+const Input = ({
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input
     {...props}
     className={cn(
       "flex h-10 w-full rounded-lg border border-input bg-background/50 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600/50 transition-all outline-none disabled:opacity-50 disabled:bg-muted/30 disabled:cursor-not-allowed",
-      className
+      className,
     )}
   />
 );
@@ -68,19 +96,34 @@ const Input = ({ className, ...props }: React.InputHTMLAttributes<HTMLInputEleme
 // ── Color palette por tipo de deducción ──────────────────────────────────────
 
 const TIPO_STYLE: Record<string, { pill: string; dot: string }> = {
-  "Vendedor":      { pill: "bg-blue-500/10 text-blue-400 border-blue-500/25",       dot: "bg-blue-400" },
-  "Documentación": { pill: "bg-purple-500/10 text-purple-400 border-purple-500/25", dot: "bg-purple-400" },
-  "IVA":           { pill: "bg-amber-500/10 text-amber-400 border-amber-500/25",    dot: "bg-amber-400" },
-  "Desarrollador": { pill: "bg-celeste-kore/10 text-celeste-kore border-celeste-kore/25", dot: "bg-celeste-kore" },
-  "Kore":          { pill: "bg-red-500/10 text-red-400 border-red-500/25",          dot: "bg-red-400" },
+  Vendedor: {
+    pill: "bg-blue-500/10 text-blue-400 border-blue-500/25",
+    dot: "bg-blue-400",
+  },
+  Documentación: {
+    pill: "bg-purple-500/10 text-purple-400 border-purple-500/25",
+    dot: "bg-purple-400",
+  },
+  IVA: {
+    pill: "bg-amber-500/10 text-amber-400 border-amber-500/25",
+    dot: "bg-amber-400",
+  },
+  Desarrollador: {
+    pill: "bg-celeste-kore/10 text-celeste-kore border-celeste-kore/25",
+    dot: "bg-celeste-kore",
+  },
+  Kore: {
+    pill: "bg-red-500/10 text-red-400 border-red-500/25",
+    dot: "bg-red-400",
+  },
 };
 
 const DEFAULT_PCT: Record<string, number> = {
-  "Kore": 10,
-  "Vendedor": 10,
-  "Documentación": 10,
-  "IVA": 12,
-  "Desarrollador": 0,
+  Kore: 10,
+  Vendedor: 10,
+  Documentación: 10,
+  IVA: 12,
+  Desarrollador: 0,
 };
 
 // ── AccordionDeduccion ──────────────────────────────────────────────────────────────────────────────
@@ -105,10 +148,11 @@ function DeduccionRow({
   forceOpen: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  
+
   // Autocomplete state
   const currentUserId = field.usuario_id || "";
-  const initialUserName = users?.find((u: Profile) => u.id === currentUserId)?.nombre || "";
+  const initialUserName =
+    users?.find((u: Profile) => u.id === currentUserId)?.nombre || "";
   const [searchQuery, setSearchQuery] = useState(initialUserName);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -138,7 +182,7 @@ function DeduccionRow({
   const filteredSuggestions = useMemo(() => {
     if (searchQuery.trim().length < 2) return [];
     return (users || []).filter((u: Profile) =>
-      u.nombre?.toLowerCase().includes(searchQuery.toLowerCase())
+      u.nombre?.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }, [users, searchQuery]);
 
@@ -161,7 +205,7 @@ function DeduccionRow({
       <div
         className={cn(
           "flex items-center gap-2 px-3 py-2.5",
-          canExpand && "cursor-pointer"
+          canExpand && "cursor-pointer",
         )}
         onClick={() => canExpand && setOpen((o) => !o)}
       >
@@ -169,7 +213,7 @@ function DeduccionRow({
         <span
           className={cn(
             "text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border shrink-0",
-            style.pill
+            style.pill,
           )}
         >
           {field.tipo}
@@ -187,7 +231,9 @@ function DeduccionRow({
             type="number"
             step="0.01"
             inputMode="decimal"
-            {...register(`deducciones.${idx}.porcentaje`, { valueAsNumber: true })}
+            {...register(`deducciones.${idx}.porcentaje`, {
+              valueAsNumber: true,
+            })}
             className="w-10 bg-transparent border-b border-border/50 focus:border-celeste-kore/50 outline-none text-sm font-black tabular-nums text-foreground text-right"
           />
           <span className="text-[10px] font-bold text-muted-foreground">%</span>
@@ -199,7 +245,7 @@ function DeduccionRow({
             size={12}
             className={cn(
               "text-muted-foreground/40 transition-transform duration-200 shrink-0",
-              isOpen && "rotate-180"
+              isOpen && "rotate-180",
             )}
           />
         ) : (
@@ -207,7 +253,10 @@ function DeduccionRow({
         )}
 
         {/* Botón de Acciones */}
-        <div className="relative ml-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="relative ml-1 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={onRemove}
@@ -231,8 +280,13 @@ function DeduccionRow({
           >
             <div className="px-3 pb-3 pt-2.5 space-y-3 border-t border-border/20 bg-muted/5 flex flex-col gap-2 rounded-b-xl">
               {/* Asignar Usuario (Autocomplete) */}
-              {["Vendedor", "Desarrollador", "Documentación"].includes(field.tipo) && (
-                <div className="flex flex-col gap-1.5 text-left relative" onClick={(e) => e.stopPropagation()}>
+              {["Vendedor", "Desarrollador", "Documentación"].includes(
+                field.tipo,
+              ) && (
+                <div
+                  className="flex flex-col gap-1.5 text-left relative"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">
                     Asignado a:
                   </label>
@@ -248,16 +302,19 @@ function DeduccionRow({
                     }}
                     className="w-full bg-background dark:bg-zinc-900 border border-border dark:border-white/10 rounded-xl px-3 py-2 text-xs text-foreground dark:text-white focus:border-celeste-kore/50 outline-none transition-all"
                   />
-                  
+
                   {/* Campo oculto para react-hook-form */}
-                  <input type="hidden" {...register(`deducciones.${idx}.usuario_id`)} />
+                  <input
+                    type="hidden"
+                    {...register(`deducciones.${idx}.usuario_id`)}
+                  />
 
                   {/* Suggestions List */}
                   <AnimatePresence>
                     {showSuggestions && (
                       <>
-                        <div 
-                          className="fixed inset-0 z-40 cursor-default" 
+                        <div
+                          className="fixed inset-0 z-40 cursor-default"
                           onClick={() => setShowSuggestions(false)}
                         />
                         <ul className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-2xl shadow-black/40 overflow-hidden max-h-48 overflow-y-auto">
@@ -285,7 +342,10 @@ function DeduccionRow({
               )}
 
               {/* Descripción */}
-              <div className="flex flex-col gap-1.5 text-left" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="flex flex-col gap-1.5 text-left"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">
                   Descripción:
                 </label>
@@ -312,28 +372,22 @@ const getCode = (id: string) => {
   return clean.slice(0, 3) + "-" + clean.slice(3, 6);
 };
 
-export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormProps) {
+export default function ProyectoForm({
+  proyecto: proyectoProp,
+}: ProyectoFormProps) {
   const pathname = usePathname();
-  const isEditRoute = pathname?.includes('/editar');
-
-  const [paramId, setParamId] = useState<string | null>(null);
+  const params = useParams();
+  const pathSegment =
+    typeof params?.proyecto === "string" ? params.proyecto : null;
+  const isEditRoute = pathname?.includes("/editar");
   const router = useRouter();
 
-  useEffect(() => {
-    if (proyectoProp || !isEditRoute) return;
-    const id = sessionStorage.getItem('selectedProyectoId');
-    if (id) {
-      setParamId(id);
-    } else {
-      router.replace('/kore/proyectos');
-    }
-  }, [router, proyectoProp, isEditRoute]);
-
-  // Internal state for fetched proyecto when editing via URL param
-  const [proyecto, setProyecto] = useState<Proyecto | null>(proyectoProp ?? null);
+  const [proyecto, setProyecto] = useState<Proyecto | null>(
+    proyectoProp ?? null,
+  );
   const [notFound, setNotFound] = useState(false);
 
-  const isEditing = !!(proyecto || paramId || isEditRoute);
+  const isEditing = !!(proyecto || pathSegment || isEditRoute);
   const { effectiveRole } = useUserContext();
   const isDeveloper = effectiveRole === "proyectos";
 
@@ -345,24 +399,43 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
   }, [effectiveRole, router]);
 
   const { data: proyectos, isLoading: loadingProyectos } = useProyectos();
-  
+
   // Update proyecto state when data is loaded
   useEffect(() => {
     if (proyectoProp) {
       setProyecto(proyectoProp);
       return;
     }
-    if (!paramId || !proyectos) return;
-    
-    const found = proyectos.find((p: Proyecto) => p.id === paramId || getCode(p.id) === paramId);
+    if (!isEditRoute) return;
+    if (!pathSegment) {
+      router.replace("/kore/proyectos");
+      return;
+    }
+    if (!proyectos) return;
+
+    const found = matchProyectoFromPathSegment(proyectos, pathSegment);
     if (found) {
       setProyecto(found);
+      setNotFound(false);
+      sessionStorage.setItem("selectedProyectoId", found.id);
+      const canonicalSegment = getProyectoPathSegment(found);
+      if (
+        pathSegment !== found.id &&
+        pathSegment !== getProyectoCode(found.id) &&
+        pathSegment !== canonicalSegment
+      ) {
+        router.replace(getProyectoEditarPath(found));
+      }
     } else {
       setNotFound(true);
     }
-  }, [paramId, proyectoProp, proyectos]);
+  }, [pathSegment, proyectoProp, proyectos, router, isEditRoute]);
 
-  const loadingProyecto = isEditRoute && !proyectoProp && (loadingProyectos || !proyecto);
+  const loadingProyecto =
+    isEditRoute &&
+    !proyectoProp &&
+    !!pathSegment &&
+    (loadingProyectos || (!proyecto && !notFound));
 
   const { mutate: createMutation } = useCreateProyecto();
   const { mutate: updateMutation } = useUpdateProyecto();
@@ -376,7 +449,11 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr + "T00:00:00");
-    return date.toLocaleDateString("es-GT", { day: "2-digit", month: "short", year: "numeric" });
+    return date.toLocaleDateString("es-GT", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   const formatPhoneDisplay = (phone: string | null | undefined): string => {
@@ -392,18 +469,20 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
   };
 
   const handleRemoveClient = async () => {
-    const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark");
+    const isDark =
+      typeof window !== "undefined" &&
+      document.documentElement.classList.contains("dark");
     const result = await Swal.fire({
-      title: '¿Quitar cliente?',
+      title: "¿Quitar cliente?",
       text: "Esto quitará al cliente del proyecto. No se eliminará al cliente del sistema.",
-      icon: 'warning',
+      icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: isDark ? '#27272a' : '#71717a',
-      confirmButtonText: 'Sí, quitar',
-      cancelButtonText: 'Cancelar',
-      background: isDark ? '#18181b' : '#ffffff',
-      color: isDark ? '#ffffff' : '#000000',
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: isDark ? "#27272a" : "#71717a",
+      confirmButtonText: "Sí, quitar",
+      cancelButtonText: "Cancelar",
+      background: isDark ? "#18181b" : "#ffffff",
+      color: isDark ? "#ffffff" : "#000000",
     });
 
     if (result.isConfirmed) {
@@ -424,7 +503,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
     control,
     formState: { errors, isSubmitting },
   } = useForm<ProyectoFormValues>({
-    resolver: zodResolver(proyectoSchema) as unknown as Resolver<ProyectoFormValues>,
+    resolver: zodResolver(
+      proyectoSchema,
+    ) as unknown as Resolver<ProyectoFormValues>,
     defaultValues: {
       nombre: "",
       cliente_nombre: "",
@@ -435,7 +516,7 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
       precio: 0,
       monto_mensual_fijo: 0,
       mantenimiento_fecha_cobro: "",
-      estado: "En Progreso",
+      estado: "En progreso",
       vendedor_id: "",
       deducciones: [],
     },
@@ -474,8 +555,18 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
   const watchFechaEntrega = watch("fecha_entrega");
 
   const months = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
   ];
 
   const [viewingMonth, setViewingMonth] = useState<number>(() => {
@@ -507,19 +598,19 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
     const startOfMonth = new Date(year, month, 1);
     const endOfMonth = new Date(year, month + 1, 0);
     const daysInMonth = endOfMonth.getDate();
-    
+
     const startDayOfWeek = startOfMonth.getDay();
     const grid = [];
-    
+
     for (let i = 0; i < startDayOfWeek; i++) {
       grid.push(null);
     }
-    
+
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       grid.push({ dayNum: d, dateStr });
     }
-    
+
     return grid;
   };
 
@@ -547,15 +638,28 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
       const d = new Date(dateStr.split("T")[0] + "T00:00:00");
       if (isNaN(d.getTime())) return "Seleccionar Mes/Año";
       const months = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        "Enero",
+        "Febrero",
+        "Marzo",
+        "Abril",
+        "Mayo",
+        "Junio",
+        "Julio",
+        "Agosto",
+        "Septiembre",
+        "Octubre",
+        "Noviembre",
+        "Diciembre",
       ];
       return `${months[d.getMonth()]} de ${d.getFullYear()}`;
     } catch {
       return "Seleccionar Mes/Año";
     }
   };
-  const totalDeduccionesPct = fields.reduce((acc, curr) => acc + (Number(curr.porcentaje) || 0), 0);
+  const totalDeduccionesPct = fields.reduce(
+    (acc, curr) => acc + (Number(curr.porcentaje) || 0),
+    0,
+  );
 
   const [newDed, setNewDed] = useState<{
     tipo: TipoDeduccion;
@@ -618,18 +722,25 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
   const filteredUsers = useMemo(() => {
     if (!userSearchQuery || userSearchQuery.trim().length < 1) return [];
     return ((users as Profile[]) || []).filter((u: Profile) =>
-      u.nombre?.toLowerCase().includes(userSearchQuery.toLowerCase())
+      u.nombre?.toLowerCase().includes(userSearchQuery.toLowerCase()),
     );
   }, [users, userSearchQuery]);
 
   // ── Sincronización de Vendedor con Deducción de Comisión ──
   const currentDeducciones = watch("deducciones") || [];
   const vendedorId = watch("vendedor_id");
-  const firstComision = currentDeducciones.find((d: DeduccionItem) => 
-    (d.tipo === "Vendedor" || d.tipo === "Comisión" || d.tipo === "vendedor") && d.usuario_id
-  ) || currentDeducciones.find((d: DeduccionItem) => 
-    d.tipo === "Vendedor" || d.tipo === "Comisión" || d.tipo === "vendedor"
-  );
+  const firstComision =
+    currentDeducciones.find(
+      (d: DeduccionItem) =>
+        (d.tipo === "Vendedor" ||
+          d.tipo === "Comisión" ||
+          d.tipo === "vendedor") &&
+        d.usuario_id,
+    ) ||
+    currentDeducciones.find(
+      (d: DeduccionItem) =>
+        d.tipo === "Vendedor" || d.tipo === "Comisión" || d.tipo === "vendedor",
+    );
   const firstComisionUsuarioId = firstComision?.usuario_id || "";
 
   useEffect(() => {
@@ -637,7 +748,6 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
       setValue("vendedor_id", firstComisionUsuarioId);
     }
   }, [firstComisionUsuarioId, vendedorId, setValue]);
-
 
   // ── Lista de clientes ──
   const { data: clientes } = useQuery({
@@ -657,22 +767,28 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
   const [showClientSuggestions, setShowClientSuggestions] = useState(false);
   const [justSelectedClient, setJustSelectedClient] = useState(false);
   const clientAutocompleteRef = useRef<HTMLDivElement>(null);
-  
+
   const clientSearchQuery = watch("cliente_nombre") || "";
 
   const filteredClientes = useMemo(() => {
     if (!clientSearchQuery || clientSearchQuery.trim().length < 2) return [];
     return ((clientes as Cliente[]) || []).filter((c: Cliente) =>
-      c.nombre?.toLowerCase().includes(clientSearchQuery.toLowerCase())
+      c.nombre?.toLowerCase().includes(clientSearchQuery.toLowerCase()),
     );
   }, [clientes, clientSearchQuery]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (userAutocompleteRef.current && !userAutocompleteRef.current.contains(e.target as Node)) {
+      if (
+        userAutocompleteRef.current &&
+        !userAutocompleteRef.current.contains(e.target as Node)
+      ) {
         setShowUserSuggestions(false);
       }
-      if (clientAutocompleteRef.current && !clientAutocompleteRef.current.contains(e.target as Node)) {
+      if (
+        clientAutocompleteRef.current &&
+        !clientAutocompleteRef.current.contains(e.target as Node)
+      ) {
         setShowClientSuggestions(false);
       }
     };
@@ -689,11 +805,15 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
         cliente_nit: proyecto.cliente_nit || "",
         cliente_telefono: proyecto.cliente_telefono || "",
         cliente_correo: proyecto.cliente_correo || "",
-        fecha_entrega: proyecto.fecha_entrega ? proyecto.fecha_entrega.split("T")[0] : "",
+        fecha_entrega: proyecto.fecha_entrega
+          ? proyecto.fecha_entrega.split("T")[0]
+          : "",
         precio: Number(proyecto.precio) || 0,
         monto_mensual_fijo: Number(proyecto.monto_mensual_fijo) || 0,
-        mantenimiento_fecha_cobro: proyecto.mantenimiento_fecha_cobro ? proyecto.mantenimiento_fecha_cobro.split("T")[0] : "",
-        estado: proyecto.estado || "En Progreso",
+        mantenimiento_fecha_cobro: proyecto.mantenimiento_fecha_cobro
+          ? proyecto.mantenimiento_fecha_cobro.split("T")[0]
+          : "",
+        estado: normalizeEstadoProyecto(proyecto.estado),
         vendedor_id: proyecto.vendedor_id || "",
         deducciones: (proyecto.deducciones || []).map((d) => ({
           tipo: d.tipo,
@@ -713,14 +833,39 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
         precio: 0,
         monto_mensual_fijo: 0,
         mantenimiento_fecha_cobro: "",
-        estado: "En Progreso",
+        estado: "En progreso",
         vendedor_id: "",
         deducciones: [
-          { tipo: "Vendedor", porcentaje: 10, descripcion: "Comisión Vendedor", usuario_id: "" },
-          { tipo: "Desarrollador", porcentaje: 25, descripcion: "Desarrollo", usuario_id: "" },
-          { tipo: "IVA", porcentaje: 12, descripcion: "Impuesto al Valor Agregado", usuario_id: "" },
-          { tipo: "Documentación", porcentaje: 3, descripcion: "Documentación", usuario_id: "" },
-          { tipo: "Kore", porcentaje: 50, descripcion: "Retención Kore", usuario_id: "" },
+          {
+            tipo: "Vendedor",
+            porcentaje: 10,
+            descripcion: "Comisión Vendedor",
+            usuario_id: "",
+          },
+          {
+            tipo: "Desarrollador",
+            porcentaje: 25,
+            descripcion: "Desarrollo",
+            usuario_id: "",
+          },
+          {
+            tipo: "IVA",
+            porcentaje: 12,
+            descripcion: "Impuesto al Valor Agregado",
+            usuario_id: "",
+          },
+          {
+            tipo: "Documentación",
+            porcentaje: 3,
+            descripcion: "Documentación",
+            usuario_id: "",
+          },
+          {
+            tipo: "Kore",
+            porcentaje: 50,
+            descripcion: "Retención Kore",
+            usuario_id: "",
+          },
         ],
       });
     }
@@ -732,7 +877,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
       <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
         <div className="flex flex-col items-center gap-4 text-muted-foreground">
           <RefreshCw size={32} className="animate-spin text-celeste-kore" />
-          <p className="text-sm font-bold uppercase tracking-widest">Cargando proyecto…</p>
+          <p className="text-sm font-bold uppercase tracking-widest">
+            Cargando proyecto…
+          </p>
         </div>
       </div>
     );
@@ -742,8 +889,12 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
     return (
       <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
         <div className="text-center space-y-3">
-          <p className="text-lg font-black text-foreground">Proyecto no encontrado</p>
-          <p className="text-sm text-muted-foreground">El proyecto que buscas no existe o fue eliminado.</p>
+          <p className="text-lg font-black text-foreground">
+            Proyecto no encontrado
+          </p>
+          <p className="text-sm text-muted-foreground">
+            El proyecto que buscas no existe o fue eliminado.
+          </p>
         </div>
       </div>
     );
@@ -758,7 +909,7 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
           onSuccess: (res) => {
             if (!res.error) router.push("/kore/proyectos");
           },
-        }
+        },
       );
     } else {
       createMutation(data, {
@@ -769,7 +920,8 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
     }
   };
 
-  const onInvalid = (errs: FieldErrors<ProyectoFormValues>) => console.error("❌ Validación fallida:", errs);
+  const onInvalid = (errs: FieldErrors<ProyectoFormValues>) =>
+    console.error("❌ Validación fallida:", errs);
 
   // ── Render ──
   return (
@@ -779,7 +931,11 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
       transition={{ duration: 0.3, ease: "easeOut" }}
       className="w-full max-w-5xl mx-auto flex flex-col gap-6 text-foreground px-2 pt-32 pb-8 md:px-4 md:pt-28 relative mt-4 md:mt-8"
     >
-      <title>{isEditing ? `Editar Proyecto: ${proyecto?.nombre || ""} | KORE BMS` : "Nuevo Proyecto | KORE BMS"}</title>
+      <title>
+        {isEditing
+          ? `Editar Proyecto: ${proyecto?.nombre || ""} | KOREapp`
+          : "Nuevo Proyecto | KOREapp"}
+      </title>
 
       {/* Decorative Glows */}
       <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-celeste-kore/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse" />
@@ -797,18 +953,16 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                 {isEditing ? "Modificando información" : "Registro de datos"}
               </h2>
               <h1 className="text-xl sm:text-4xl font-black tracking-tight mt-0.5 sm:mt-1 leading-none uppercase text-black dark:text-white">
-                {isEditing ? "Editar" : "Nuevo"} <span className="text-celeste-kore">Proyecto</span>
+                {isEditing ? "Editar" : "Nuevo"}{" "}
+                <span className="text-celeste-kore">Proyecto</span>
               </h1>
             </div>
           </div>
         </div>
 
         {/* Form body */}
-        <form
-          id="proyecto-form"
-          onSubmit={handleSubmit(onSubmit, onInvalid)}
-        >
-            <div className={cn("space-y-8", step === 1 ? "block" : "hidden")}>
+        <form id="proyecto-form" onSubmit={handleSubmit(onSubmit, onInvalid)}>
+          <div className={cn("space-y-8", step === 1 ? "block" : "hidden")}>
             {/* ── Información General ── */}
             <div className="space-y-4">
               <h4 className="text-xs font-black text-celeste-kore uppercase tracking-widest border-b border-border/50 pb-2">
@@ -821,25 +975,35 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                     id="nombre"
                     {...register("nombre")}
                     placeholder="Ej. Sistema de Inventario"
-                    className={errors.nombre ? "border-destructive ring-1 ring-destructive" : ""}
+                    className={
+                      errors.nombre
+                        ? "border-destructive ring-1 ring-destructive"
+                        : ""
+                    }
                   />
                   {errors.nombre && (
-                    <p className="text-[10px] text-destructive">{errors.nombre.message}</p>
+                    <p className="text-[10px] text-destructive">
+                      {errors.nombre.message}
+                    </p>
                   )}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="estado">Estado</Label>
                   <Select
                     value={watch("estado")}
-                    onValueChange={(val) => setValue("estado", val, { shouldValidate: true })}
+                    onValueChange={(val) =>
+                      setValue("estado", val, { shouldValidate: true })
+                    }
                   >
                     <SelectTrigger className="h-10 w-full rounded-lg border-input bg-background/50 outline-none focus:ring-2 focus:ring-red-600/50">
                       <SelectValue placeholder="Seleccione el estado" />
                     </SelectTrigger>
                     <SelectContent position="popper" sideOffset={4}>
-                      <SelectItem value="En Progreso">En Progreso</SelectItem>
-                      <SelectItem value="En pausa">En Pausa</SelectItem>
-                      <SelectItem value="Finalizados">Finalizado</SelectItem>
+                      {ESTADOS_PROYECTO.map((estado) => (
+                        <SelectItem key={estado} value={estado}>
+                          {estado}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -853,7 +1017,10 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
               </h4>
               <div className="grid grid-cols-1 gap-4">
                 {/* Search Box */}
-                <div className="grid gap-2 relative" ref={clientAutocompleteRef}>
+                <div
+                  className="grid gap-2 relative"
+                  ref={clientAutocompleteRef}
+                >
                   <Label htmlFor="cliente_nombre">Nombre Cliente</Label>
                   <div className="flex gap-2">
                     <Input
@@ -870,7 +1037,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                       onBlur={() => {
                         setTimeout(() => {
                           const val = clientSearchQuery.trim().toLowerCase();
-                          const matched = ((clientes as Cliente[]) || []).find((c: Cliente) => c.nombre?.toLowerCase() === val);
+                          const matched = ((clientes as Cliente[]) || []).find(
+                            (c: Cliente) => c.nombre?.toLowerCase() === val,
+                          );
                           if (!matched && !justSelectedClient) {
                             setValue("cliente_nombre", "");
                             setValue("cliente_nit", "");
@@ -881,12 +1050,18 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                       }}
                       onChange={(e) => {
                         const val = e.target.value;
-                        setValue("cliente_nombre", val, { shouldValidate: true });
+                        setValue("cliente_nombre", val, {
+                          shouldValidate: true,
+                        });
                         setJustSelectedClient(false);
                         setShowClientSuggestions(true);
-                        
+
                         // Clear standard form values until they strictly select or match one
-                        const matched = ((clientes as Cliente[]) || []).find((c: Cliente) => c.nombre?.toLowerCase() === val.trim().toLowerCase());
+                        const matched = ((clientes as Cliente[]) || []).find(
+                          (c: Cliente) =>
+                            c.nombre?.toLowerCase() ===
+                            val.trim().toLowerCase(),
+                        );
                         if (matched) {
                           setValue("cliente_nit", matched.nit || "");
                           setValue("cliente_telefono", matched.telefono || "");
@@ -897,7 +1072,11 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                           setValue("cliente_correo", "");
                         }
                       }}
-                      className={errors.cliente_nombre ? "border-destructive ring-1 ring-destructive" : ""}
+                      className={
+                        errors.cliente_nombre
+                          ? "border-destructive ring-1 ring-destructive"
+                          : ""
+                      }
                     />
                     <button
                       type="button"
@@ -924,7 +1103,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                               onMouseDown={(e) => {
                                 e.preventDefault();
                                 setJustSelectedClient(true);
-                                setValue("cliente_nombre", c.nombre, { shouldValidate: true });
+                                setValue("cliente_nombre", c.nombre, {
+                                  shouldValidate: true,
+                                });
                                 setValue("cliente_nit", c.nit || "");
                                 setValue("cliente_telefono", c.telefono || "");
                                 setValue("cliente_correo", c.correo || "");
@@ -932,9 +1113,13 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                               }}
                               className="px-4 py-2 text-sm hover:bg-muted cursor-pointer transition-colors text-left border-b border-border/30 last:border-0"
                             >
-                              <p className="font-bold text-foreground">{c.nombre}</p>
+                              <p className="font-bold text-foreground">
+                                {c.nombre}
+                              </p>
                               {c.nit && (
-                                <p className="text-[10px] text-muted-foreground">NIT: {c.nit}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  NIT: {c.nit}
+                                </p>
                               )}
                             </li>
                           ))
@@ -957,7 +1142,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                     )}
                   </AnimatePresence>
                   {errors.cliente_nombre && (
-                    <p className="text-[10px] text-destructive">{errors.cliente_nombre.message}</p>
+                    <p className="text-[10px] text-destructive">
+                      {errors.cliente_nombre.message}
+                    </p>
                   )}
                 </div>
 
@@ -980,26 +1167,42 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                         <div className="w-1.5 h-1.5 rounded-full bg-celeste-kore animate-pulse" />
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                       <div className="space-y-1">
-                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">Nombre</p>
-                        <p className="text-xs sm:text-sm font-black text-foreground uppercase">{watch("cliente_nombre")}</p>
+                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                          Nombre
+                        </p>
+                        <p className="text-xs sm:text-sm font-black text-foreground uppercase">
+                          {watch("cliente_nombre")}
+                        </p>
                       </div>
-                      
+
                       <div className="space-y-1">
-                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">NIT</p>
-                        <p className="text-xs sm:text-sm font-black text-foreground uppercase">{watch("cliente_nit") || "C/F"}</p>
+                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                          NIT
+                        </p>
+                        <p className="text-xs sm:text-sm font-black text-foreground uppercase">
+                          {watch("cliente_nit") || "C/F"}
+                        </p>
                       </div>
-                      
+
                       <div className="space-y-1">
-                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">Teléfono</p>
-                        <p className="text-xs sm:text-sm font-black text-foreground">{formatPhoneDisplay(watch("cliente_telefono")) || "—"}</p>
+                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                          Teléfono
+                        </p>
+                        <p className="text-xs sm:text-sm font-black text-foreground">
+                          {formatPhoneDisplay(watch("cliente_telefono")) || "—"}
+                        </p>
                       </div>
-                      
+
                       <div className="space-y-1">
-                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">Correo Electrónico</p>
-                        <p className="text-xs sm:text-sm font-black text-foreground break-all">{watch("cliente_correo") || "—"}</p>
+                        <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                          Correo Electrónico
+                        </p>
+                        <p className="text-xs sm:text-sm font-black text-foreground break-all">
+                          {watch("cliente_correo") || "—"}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1027,7 +1230,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                       className={errors.precio ? "border-destructive" : ""}
                     />
                     {errors.precio && (
-                      <p className="text-[10px] text-destructive">{errors.precio.message}</p>
+                      <p className="text-[10px] text-destructive">
+                        {errors.precio.message}
+                      </p>
                     )}
                   </div>
                   <div className="grid gap-2">
@@ -1039,15 +1244,22 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                         id="fecha_entrega"
                         {...register("fecha_entrega")}
                       />
-                      
+
                       {/* Trigger Button */}
                       <button
                         type="button"
                         onClick={() => setShowEntregaPicker(!showEntregaPicker)}
                         className="w-full h-10 px-3 py-2 text-sm text-left bg-background/50 border border-input rounded-xl font-medium text-foreground hover:bg-muted/30 transition-colors flex items-center justify-between cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600/50"
                       >
-                        <span>{watchFechaEntrega ? formatDate(watchFechaEntrega) : "Seleccionar Fecha"}</span>
-                        <ChevronDown size={16} className="text-muted-foreground" />
+                        <span>
+                          {watchFechaEntrega
+                            ? formatDate(watchFechaEntrega)
+                            : "Seleccionar Fecha"}
+                        </span>
+                        <ChevronDown
+                          size={16}
+                          className="text-muted-foreground"
+                        />
                       </button>
 
                       {/* Month Year Picker Calendar Dropdown */}
@@ -1059,7 +1271,7 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                               className="fixed inset-0 z-40 bg-transparent"
                               onClick={() => setShowEntregaPicker(false)}
                             />
-                            
+
                             <motion.div
                               className="absolute bottom-full left-0 mb-2 z-50 w-[280px] bg-white dark:bg-black border border-border dark:border-white/10 rounded-2xl shadow-2xl p-4 text-foreground dark:text-white"
                               initial={{ opacity: 0, scale: 0.95, y: 8 }}
@@ -1074,7 +1286,10 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                   onClick={handlePrevMonth}
                                   className="p-1 hover:bg-muted dark:hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                                 >
-                                  <ChevronLeft size={16} className="text-muted-foreground hover:text-foreground dark:hover:text-white" />
+                                  <ChevronLeft
+                                    size={16}
+                                    className="text-muted-foreground hover:text-foreground dark:hover:text-white"
+                                  />
                                 </button>
                                 <span className="font-black text-xs uppercase tracking-wider text-foreground">
                                   {`${months[viewingMonth]} ${viewingYear}`}
@@ -1084,25 +1299,43 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                   onClick={handleNextMonth}
                                   className="p-1 hover:bg-muted dark:hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                                 >
-                                  <ChevronRight size={16} className="text-muted-foreground hover:text-foreground dark:hover:text-white" />
+                                  <ChevronRight
+                                    size={16}
+                                    className="text-muted-foreground hover:text-foreground dark:hover:text-white"
+                                  />
                                 </button>
                               </div>
 
                               {/* Calendar Weekdays */}
                               <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                                {["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"].map((d) => (
-                                  <span key={d} className="text-[9px] font-black text-muted-foreground uppercase">
-                                    {d}
-                                  </span>
-                                ))}
+                                {["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa"].map(
+                                  (d) => (
+                                    <span
+                                      key={d}
+                                      className="text-[9px] font-black text-muted-foreground uppercase"
+                                    >
+                                      {d}
+                                    </span>
+                                  ),
+                                )}
                               </div>
 
                               {/* Calendar Day Grid */}
                               <div className="grid grid-cols-7 gap-1">
-                                {getDaysInMonthGrid(viewingYear, viewingMonth).map((day, idx) => {
-                                  if (!day) return <div key={`empty-${idx}`} className="w-8 h-8" />;
+                                {getDaysInMonthGrid(
+                                  viewingYear,
+                                  viewingMonth,
+                                ).map((day, idx) => {
+                                  if (!day)
+                                    return (
+                                      <div
+                                        key={`empty-${idx}`}
+                                        className="w-8 h-8"
+                                      />
+                                    );
 
-                                  const isSelected = watchFechaEntrega === day.dateStr;
+                                  const isSelected =
+                                    watchFechaEntrega === day.dateStr;
 
                                   return (
                                     <button
@@ -1116,7 +1349,7 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                         "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black transition-all cursor-pointer select-none",
                                         isSelected
                                           ? "bg-[#B7494E] text-white shadow-md"
-                                          : "text-muted-foreground hover:bg-muted dark:hover:bg-white/5 hover:text-foreground dark:hover:text-white"
+                                          : "text-muted-foreground hover:bg-muted dark:hover:bg-white/5 hover:text-foreground dark:hover:text-white",
                                       )}
                                     >
                                       {day.dayNum}
@@ -1131,7 +1364,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                     </div>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="monto_mensual_fijo">Mantenimiento (Q)</Label>
+                    <Label htmlFor="monto_mensual_fijo">
+                      Mantenimiento (Q)
+                    </Label>
                     <div className="relative">
                       <Input
                         id="monto_mensual_fijo"
@@ -1139,16 +1374,24 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                         step="0.01"
                         inputMode="decimal"
                         placeholder="Ej. 150.00"
-                        {...register("monto_mensual_fijo", { valueAsNumber: true })}
-                        className={errors.monto_mensual_fijo ? "border-destructive" : ""}
+                        {...register("monto_mensual_fijo", {
+                          valueAsNumber: true,
+                        })}
+                        className={
+                          errors.monto_mensual_fijo ? "border-destructive" : ""
+                        }
                       />
                       {errors.monto_mensual_fijo && (
-                        <p className="text-[10px] text-destructive mt-1">{errors.monto_mensual_fijo.message as string}</p>
+                        <p className="text-[10px] text-destructive mt-1">
+                          {errors.monto_mensual_fijo.message as string}
+                        </p>
                       )}
                     </div>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="mantenimiento_fecha_cobro">Fecha Cobro Mant.</Label>
+                    <Label htmlFor="mantenimiento_fecha_cobro">
+                      Fecha Cobro Mant.
+                    </Label>
                     <div className="relative">
                       {/* Hidden input to bind React Hook Form register */}
                       <input
@@ -1156,15 +1399,20 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                         id="mantenimiento_fecha_cobro"
                         {...register("mantenimiento_fecha_cobro")}
                       />
-                      
+
                       {/* Trigger Button */}
                       <button
                         type="button"
-                        onClick={() => setShowMonthYearPicker(!showMonthYearPicker)}
+                        onClick={() =>
+                          setShowMonthYearPicker(!showMonthYearPicker)
+                        }
                         className="w-full h-10 px-3 py-2 text-sm text-left bg-background/50 border border-input rounded-xl font-medium text-foreground hover:bg-muted/30 transition-colors flex items-center justify-between cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600/50"
                       >
                         <span>{getFechaCobroDisplay(watchFechaCobro)}</span>
-                        <ChevronDown size={16} className="text-muted-foreground" />
+                        <ChevronDown
+                          size={16}
+                          className="text-muted-foreground"
+                        />
                       </button>
 
                       {/* Month Year Picker Calendar Dropdown */}
@@ -1176,7 +1424,7 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                               className="fixed inset-0 z-40 bg-transparent"
                               onClick={() => setShowMonthYearPicker(false)}
                             />
-                            
+
                             <motion.div
                               className="absolute bottom-full right-0 mb-2 z-50 w-[280px] bg-white dark:bg-black border border-border dark:border-white/10 rounded-2xl shadow-2xl p-4 text-foreground dark:text-white"
                               initial={{ opacity: 0, scale: 0.95, y: 8 }}
@@ -1188,33 +1436,55 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                               <div className="flex items-center justify-between mb-4 border-b border-border dark:border-white/10 pb-2">
                                 <button
                                   type="button"
-                                  onClick={() => setPickerYear(y => y - 1)}
+                                  onClick={() => setPickerYear((y) => y - 1)}
                                   className="p-1 hover:bg-muted dark:hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                                 >
-                                  <ChevronLeft size={16} className="text-muted-foreground hover:text-foreground dark:hover:text-white" />
+                                  <ChevronLeft
+                                    size={16}
+                                    className="text-muted-foreground hover:text-foreground dark:hover:text-white"
+                                  />
                                 </button>
-                                <span className="font-black text-sm tracking-widest">{pickerYear}</span>
+                                <span className="font-black text-sm tracking-widest">
+                                  {pickerYear}
+                                </span>
                                 <button
                                   type="button"
-                                  onClick={() => setPickerYear(y => y + 1)}
+                                  onClick={() => setPickerYear((y) => y + 1)}
                                   className="p-1 hover:bg-muted dark:hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                                 >
-                                  <ChevronRight size={16} className="text-muted-foreground hover:text-foreground dark:hover:text-white" />
+                                  <ChevronRight
+                                    size={16}
+                                    className="text-muted-foreground hover:text-foreground dark:hover:text-white"
+                                  />
                                 </button>
                               </div>
 
                               {/* 12 Months Grid */}
                               <div className="grid grid-cols-3 gap-2">
                                 {[
-                                  "Ene", "Feb", "Mar", "Abr", "May", "Jun",
-                                  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
+                                  "Ene",
+                                  "Feb",
+                                  "Mar",
+                                  "Abr",
+                                  "May",
+                                  "Jun",
+                                  "Jul",
+                                  "Ago",
+                                  "Sep",
+                                  "Oct",
+                                  "Nov",
+                                  "Dic",
                                 ].map((m, idx) => {
                                   // Check if this month/year matches current selection
                                   let isSelected = false;
                                   if (watchFechaCobro) {
-                                    const d = new Date(watchFechaCobro + "T00:00:00");
+                                    const d = new Date(
+                                      watchFechaCobro + "T00:00:00",
+                                    );
                                     if (!isNaN(d.getTime())) {
-                                      isSelected = d.getFullYear() === pickerYear && d.getMonth() === idx;
+                                      isSelected =
+                                        d.getFullYear() === pickerYear &&
+                                        d.getMonth() === idx;
                                     }
                                   }
 
@@ -1223,15 +1493,20 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                       key={m}
                                       type="button"
                                       onClick={() => {
-                                        const monthStr = String(idx + 1).padStart(2, "0");
-                                        setValue("mantenimiento_fecha_cobro", `${pickerYear}-${monthStr}-01`);
+                                        const monthStr = String(
+                                          idx + 1,
+                                        ).padStart(2, "0");
+                                        setValue(
+                                          "mantenimiento_fecha_cobro",
+                                          `${pickerYear}-${monthStr}-01`,
+                                        );
                                         setShowMonthYearPicker(false);
                                       }}
                                       className={cn(
                                         "py-3 px-2 rounded-xl text-center text-xs font-black uppercase transition-all cursor-pointer select-none",
                                         isSelected
                                           ? "bg-[#B7494E] text-white shadow-md font-black"
-                                          : "text-muted-foreground hover:bg-muted dark:hover:bg-white/5 hover:text-foreground dark:hover:text-white"
+                                          : "text-muted-foreground hover:bg-muted dark:hover:bg-white/5 hover:text-foreground dark:hover:text-white",
                                       )}
                                     >
                                       {m}
@@ -1248,13 +1523,10 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                 </div>
               </div>
             )}
-            
+          </div>
 
-            </div>
-
-            {/* ======================= PASO 2 ======================= */}
-            <div className={cn("space-y-8", step === 2 ? "block" : "hidden")}>
-            
+          {/* ======================= PASO 2 ======================= */}
+          <div className={cn("space-y-8", step === 2 ? "block" : "hidden")}>
             {!isDeveloper && (
               <div className="space-y-6">
                 {/* ── Sección Deducciones ── */}
@@ -1282,7 +1554,7 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                           size={13}
                           className={cn(
                             "text-muted-foreground/50 transition-transform duration-200",
-                            allDedExpanded && "rotate-180"
+                            allDedExpanded && "rotate-180",
                           )}
                         />
                       )}
@@ -1299,38 +1571,61 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                         className="space-y-1.5"
                       >
                         {fields
-                          .map((field, index) => ({ ...field, originalIndex: index }))
+                          .map((field, index) => ({
+                            ...field,
+                            originalIndex: index,
+                          }))
                           .sort((a, b) => {
                             const getOrderScore = (tipo: string) => {
                               const t = tipo.toLowerCase();
                               if (t === "kore") return 1;
                               if (t === "iva") return 2;
-                              if (t === "documentación" || t === "documentacion") return 3;
-                              if (t === "desarrollador" || t === "desarrolladores" || t === "desarrollo") return 4;
-                              if (t === "vendedor" || t === "vendedores" || t === "comisión" || t === "comision") return 5;
+                              if (
+                                t === "documentación" ||
+                                t === "documentacion"
+                              )
+                                return 3;
+                              if (
+                                t === "desarrollador" ||
+                                t === "desarrolladores" ||
+                                t === "desarrollo"
+                              )
+                                return 4;
+                              if (
+                                t === "vendedor" ||
+                                t === "vendedores" ||
+                                t === "comisión" ||
+                                t === "comision"
+                              )
+                                return 5;
                               return 6;
                             };
-                            return getOrderScore(a.tipo) - getOrderScore(b.tipo);
+                            return (
+                              getOrderScore(a.tipo) - getOrderScore(b.tipo)
+                            );
                           })
-    .map((field) => {
-      const idx = field.originalIndex;
-                          const style =
-                            TIPO_STYLE[field.tipo] || TIPO_STYLE["Vendedor"] || { pill: "bg-gray-500/10 text-gray-400 border-gray-500/25", dot: "bg-gray-400" };
+                          .map((field) => {
+                            const idx = field.originalIndex;
+                            const style = TIPO_STYLE[field.tipo] ||
+                              TIPO_STYLE["Vendedor"] || {
+                                pill: "bg-gray-500/10 text-gray-400 border-gray-500/25",
+                                dot: "bg-gray-400",
+                              };
 
-                          return (
-                            <DeduccionRow
-                              key={field.id}
-                              field={field}
-                              idx={idx}
-                              style={style}
-                              users={users}
-                              setValue={setValue}
-                              register={register}
-                              onRemove={() => remove(idx)}
-                              forceOpen={allDedExpanded}
-                            />
-                          );
-                        })}
+                            return (
+                              <DeduccionRow
+                                key={field.id}
+                                field={field}
+                                idx={idx}
+                                style={style}
+                                users={users}
+                                setValue={setValue}
+                                register={register}
+                                onRemove={() => remove(idx)}
+                                forceOpen={allDedExpanded}
+                              />
+                            );
+                          })}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -1385,7 +1680,10 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                   <SelectTrigger className="h-10 w-full rounded-lg border-input bg-background/50 outline-none focus:ring-2 focus:ring-red-600/50">
                                     <SelectValue placeholder="Seleccione un tipo" />
                                   </SelectTrigger>
-                                  <SelectContent position="popper" sideOffset={4}>
+                                  <SelectContent
+                                    position="popper"
+                                    sideOffset={4}
+                                  >
                                     {TIPOS_DEDUCCION.map((t) => (
                                       <SelectItem key={t} value={t}>
                                         {t}
@@ -1406,7 +1704,10 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                     onChange={(e) =>
                                       setNewDed((p) => ({
                                         ...p,
-                                        porcentaje: e.target.value === "" ? "" : Number(e.target.value),
+                                        porcentaje:
+                                          e.target.value === ""
+                                            ? ""
+                                            : Number(e.target.value),
                                       }))
                                     }
                                     className="flex h-10 w-full rounded-lg border border-input bg-background/50 px-3 pr-7 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-red-600/50 transition-all"
@@ -1426,13 +1727,19 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                     placeholder="Opcional..."
                                     value={newDed.descripcion}
                                     onChange={(e) =>
-                                      setNewDed((p) => ({ ...p, descripcion: e.target.value }))
+                                      setNewDed((p) => ({
+                                        ...p,
+                                        descripcion: e.target.value,
+                                      }))
                                     }
                                     rows={1}
                                     className="flex min-h-[40px] w-full rounded-lg border border-input bg-background/50 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-red-600/50 transition-all resize-y"
                                   />
                                 </div>
-                                <div className="col-span-1 md:col-span-2 grid gap-1.5 relative" ref={userAutocompleteRef}>
+                                <div
+                                  className="col-span-1 md:col-span-2 grid gap-1.5 relative"
+                                  ref={userAutocompleteRef}
+                                >
                                   <Label>Asignar a</Label>
                                   <Input
                                     type="text"
@@ -1440,7 +1747,10 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                     value={userSearchQuery}
                                     autoComplete="off"
                                     onFocus={() => {
-                                      if (userSearchQuery.length >= 1 && !justSelectedUser) {
+                                      if (
+                                        userSearchQuery.length >= 1 &&
+                                        !justSelectedUser
+                                      ) {
                                         setShowUserSuggestions(true);
                                       }
                                     }}
@@ -1450,38 +1760,51 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                                       setJustSelectedUser(false);
                                       setShowUserSuggestions(val.length >= 1);
                                       if (val.trim() === "") {
-                                        setNewDed((p) => ({ ...p, usuario_id: "" }));
+                                        setNewDed((p) => ({
+                                          ...p,
+                                          usuario_id: "",
+                                        }));
                                       }
                                     }}
                                   />
                                   <AnimatePresence>
-                                    {showUserSuggestions && filteredUsers.length > 0 && (
-                                      <motion.ul
-                                        initial={{ opacity: 0, y: -6 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -6 }}
-                                        transition={{ duration: 0.15 }}
-                                        className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-2xl shadow-black/40 overflow-hidden max-h-48 overflow-y-auto"
-                                      >
-                                        {filteredUsers.map((u: Profile) => (
-                                          <li
-                                            key={u.id}
-                                            onMouseDown={() => {
-                                              setJustSelectedUser(true);
-                                              setNewDed((p) => ({ ...p, usuario_id: u.id }));
-                                              setUserSearchQuery(u.nombre || "");
-                                              setShowUserSuggestions(false);
-                                              setTimeout(() => setJustSelectedUser(false), 500);
-                                            }}
-                                            className="flex flex-col px-3 py-2 cursor-pointer hover:bg-celeste-kore/10 transition-colors border-b border-border/30 last:border-0 group"
-                                          >
-                                            <span className="text-sm font-bold text-foreground group-hover:text-celeste-kore transition-colors">
-                                              {u.nombre || "Sin nombre"}
-                                            </span>
-                                          </li>
-                                        ))}
-                                      </motion.ul>
-                                    )}
+                                    {showUserSuggestions &&
+                                      filteredUsers.length > 0 && (
+                                        <motion.ul
+                                          initial={{ opacity: 0, y: -6 }}
+                                          animate={{ opacity: 1, y: 0 }}
+                                          exit={{ opacity: 0, y: -6 }}
+                                          transition={{ duration: 0.15 }}
+                                          className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-2xl shadow-black/40 overflow-hidden max-h-48 overflow-y-auto"
+                                        >
+                                          {filteredUsers.map((u: Profile) => (
+                                            <li
+                                              key={u.id}
+                                              onMouseDown={() => {
+                                                setJustSelectedUser(true);
+                                                setNewDed((p) => ({
+                                                  ...p,
+                                                  usuario_id: u.id,
+                                                }));
+                                                setUserSearchQuery(
+                                                  u.nombre || "",
+                                                );
+                                                setShowUserSuggestions(false);
+                                                setTimeout(
+                                                  () =>
+                                                    setJustSelectedUser(false),
+                                                  500,
+                                                );
+                                              }}
+                                              className="flex flex-col px-3 py-2 cursor-pointer hover:bg-celeste-kore/10 transition-colors border-b border-border/30 last:border-0 group"
+                                            >
+                                              <span className="text-sm font-bold text-foreground group-hover:text-celeste-kore transition-colors">
+                                                {u.nombre || "Sin nombre"}
+                                              </span>
+                                            </li>
+                                          ))}
+                                        </motion.ul>
+                                      )}
                                   </AnimatePresence>
                                 </div>
                               </>
@@ -1505,48 +1828,46 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
                 </div>
               </div>
             )}
-            </div>
-          </form>
-
-          {/* Form Footer Buttons */}
-          <div className="flex gap-3 pt-6 border-t border-border/40 justify-end mt-8 flex-nowrap">
-            {step === 2 && (
-               <button
-                 type="button"
-                 onClick={() => setStep(1)}
-                 className="px-4 py-2.5 rounded-xl border border-celeste-kore bg-transparent text-celeste-kore hover:bg-celeste-kore/10 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
-               >
-                 Anterior
-               </button>
-            )}
-            {(step === 2 || isDeveloper) && (
-              <button
-                form="proyecto-form"
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2.5 rounded-xl border border-celeste-kore bg-transparent text-celeste-kore hover:bg-celeste-kore/10 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
-              >
-                {isSubmitting ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                {isEditing ? "Guardar" : "Crear"}
-              </button>
-            )}
-            {step === 1 && !isDeveloper && (
-               <button
-                 type="button"
-                 onClick={() => setStep(2)}
-                 className="px-6 py-2.5 rounded-xl border border-celeste-kore bg-transparent text-celeste-kore hover:bg-celeste-kore/10 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
-               >
-                 Siguiente
-               </button>
-            )}
           </div>
+        </form>
+
+        {/* Form Footer Buttons */}
+        <div className="flex gap-3 pt-6 border-t border-border/40 justify-end mt-8 flex-nowrap">
+          {step === 2 && (
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="px-4 py-2.5 rounded-xl border border-celeste-kore bg-transparent text-celeste-kore hover:bg-celeste-kore/10 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
+            >
+              Anterior
+            </button>
+          )}
+          {(step === 2 || isDeveloper) && (
+            <button
+              form="proyecto-form"
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 rounded-xl border border-celeste-kore bg-transparent text-celeste-kore hover:bg-celeste-kore/10 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+            >
+              {isSubmitting ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              {isEditing ? "Guardar" : "Crear"}
+            </button>
+          )}
+          {step === 1 && !isDeveloper && (
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="px-6 py-2.5 rounded-xl border border-celeste-kore bg-transparent text-celeste-kore hover:bg-celeste-kore/10 transition-colors text-[11px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap shrink-0"
+            >
+              Siguiente
+            </button>
+          )}
         </div>
-
-
+      </div>
 
       {isCreatingClient && (
         <CrearClienteModal
@@ -1555,7 +1876,9 @@ export default function ProyectoForm({ proyecto: proyectoProp }: ProyectoFormPro
           initialName={watch("cliente_nombre") || ""}
           onSuccess={(newCliente) => {
             setJustSelectedClient(true);
-            setValue("cliente_nombre", newCliente.nombre, { shouldValidate: true });
+            setValue("cliente_nombre", newCliente.nombre, {
+              shouldValidate: true,
+            });
             setValue("cliente_nit", newCliente.nit || "");
             setValue("cliente_telefono", newCliente.telefono || "");
             setValue("cliente_correo", newCliente.correo || "");

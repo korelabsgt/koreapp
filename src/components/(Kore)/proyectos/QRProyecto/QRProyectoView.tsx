@@ -1,119 +1,73 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-import { QRCode } from "react-qrcode-logo";
-import { Download, RefreshCw, QrCode } from "lucide-react";
-import { useProyectos, useUpdateProyectoOtrosCampos } from "@/components/(Kore)/proyectos/lib/hooks";
-import { Proyecto, OtrosCamposProyecto } from "@/components/(Kore)/proyectos/lib/zod";
-import { useRouter } from "next/navigation";
 import { useUserContext } from "@/components/(base)/providers/UserProvider";
+import {
+  getProyectoCode,
+  getProyectoPathSegment,
+  getProyectoQrPath,
+  matchProyectoFromPathSegment,
+} from "@/components/(Kore)/proyectos/lib/helpers";
+import {
+  useProyectos,
+  useUpdateProyectoOtrosCampos,
+} from "@/components/(Kore)/proyectos/lib/hooks";
+import {
+  OtrosCamposProyecto,
+  Proyecto,
+} from "@/components/(Kore)/proyectos/lib/zod";
+import { Download, QrCode, RefreshCw } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { QRCode } from "react-qrcode-logo";
 
-const getCode = (id: string) => {
-  if (!id) return "";
-  const clean = id.replace(/-/g, "").slice(0, 6).toUpperCase();
-  return clean.slice(0, 3) + "-" + clean.slice(3, 6);
-};
+function getAccessFieldsFromProyecto(proyecto: Proyecto) {
+  const otros: OtrosCamposProyecto = proyecto.otros_campos || {};
+  let savedUrl = (otros.url_acceso as string) || "";
+  if (
+    savedUrl === "https://koreapp.vercel.app/login" ||
+    (typeof window !== "undefined" &&
+      savedUrl === `${window.location.origin}/login`)
+  ) {
+    savedUrl = "";
+  }
+  return {
+    usuarioAcceso: (otros.usuario_acceso as string) || "",
+    passAcceso: (otros.pass_acceso as string) || "",
+    urlAcceso: savedUrl,
+  };
+}
 
-export function QRProyectoView() {
-  const [paramId, setParamId] = useState<string | null>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    const id = sessionStorage.getItem('selectedProyectoId');
-    if (id) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setParamId(id);
-    } else {
-      router.replace('/kore/proyectos');
-    }
-  }, [router]);
-  const { effectiveRole } = useUserContext();
-
-  const [proyecto, setProyecto] = useState<Proyecto | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const { data: proyectos, isLoading: loadingProyectos } = useProyectos();
+function QRProyectoContent({ proyecto }: { proyecto: Proyecto }) {
   const updateOtrosCamposMutation = useUpdateProyectoOtrosCampos();
-
   const canvasRef = useRef<HTMLDivElement>(null);
-  
-  // Estados para credenciales y URL de acceso manuales
-  const [usuarioAcceso, setUsuarioAcceso] = useState("");
-  const [passAcceso, setPassAcceso] = useState("");
-  const [urlAcceso, setUrlAcceso] = useState("");
+  const initialAccess = getAccessFieldsFromProyecto(proyecto);
+  const [usuarioAcceso, setUsuarioAcceso] = useState(initialAccess.usuarioAcceso);
+  const [passAcceso, setPassAcceso] = useState(initialAccess.passAcceso);
+  const [urlAcceso, setUrlAcceso] = useState(initialAccess.urlAcceso);
   const [saving, setSaving] = useState(false);
 
-  // Guard de rol
-  useEffect(() => {
-    if (!["super", "admin", "proyectos"].includes(effectiveRole)) {
-      router.replace("/kore");
-    }
-  }, [effectiveRole, router]);
-
-  // Cargar proyecto
-  useEffect(() => {
-    if (!paramId || !proyectos) return;
-    const found = proyectos.find((p: Proyecto) => p.id === paramId || getCode(p.id) === paramId);
-    if (found) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProyecto(found);
-      const otros: OtrosCamposProyecto = found.otros_campos || {};
-      setUsuarioAcceso((otros.usuario_acceso as string) || "");
-      setPassAcceso((otros.pass_acceso as string) || "");
-      
-      let savedUrl = (otros.url_acceso as string) || "";
-      if (savedUrl === "https://koreapp.vercel.app/login" || (typeof window !== "undefined" && savedUrl === `${window.location.origin}/login`)) {
-        savedUrl = "";
-      }
-      setUrlAcceso(savedUrl);
-    } else {
-      setNotFound(true);
-    }
-  }, [paramId, proyectos]);
-
-  const loading = !!paramId && (loadingProyectos || !proyecto);
-
   const handleSave = () => {
-    if (!proyecto) return;
     setSaving(true);
-    
-    updateOtrosCamposMutation.mutate({
-      id: proyecto.id,
-      otrosCampos: {
-        usuario_acceso: usuarioAcceso.trim(),
-        pass_acceso: passAcceso.trim(),
-        url_acceso: urlAcceso.trim(),
-      }
-    }, {
-      onSuccess: () => {
-        setSaving(false);
+
+    updateOtrosCamposMutation.mutate(
+      {
+        id: proyecto.id,
+        otrosCampos: {
+          usuario_acceso: usuarioAcceso.trim(),
+          pass_acceso: passAcceso.trim(),
+          url_acceso: urlAcceso.trim(),
+        },
       },
-      onError: () => {
-        setSaving(false);
-      }
-    });
+      {
+        onSuccess: () => {
+          setSaving(false);
+        },
+        onError: () => {
+          setSaving(false);
+        },
+      },
+    );
   };
-
-  if (loading && !notFound) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
-        <div className="flex flex-col items-center gap-4 text-muted-foreground">
-          <RefreshCw size={32} className="animate-spin text-celeste-kore" />
-          <p className="text-sm font-bold uppercase tracking-widest">Cargando código QR…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (notFound || !proyecto) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
-        <div className="text-center space-y-3">
-          <p className="text-lg font-black text-foreground">Proyecto no encontrado</p>
-          <p className="text-sm text-muted-foreground">El proyecto solicitado no existe o fue eliminado.</p>
-        </div>
-      </div>
-    );
-  }
 
   const code = proyecto.id.replace(/-/g, "").slice(0, 6).toUpperCase();
   const shortCode = code.slice(0, 3) + "-" + code.slice(3, 6);
@@ -157,7 +111,11 @@ export function QRProyectoView() {
 
     ctx.fillStyle = "#71717a";
     ctx.font = "10px helvetica, sans-serif";
-    ctx.fillText(`${proyecto.cliente_nombre || "N/A"}`, finalCanvas.width / 2, infoY + 18);
+    ctx.fillText(
+      `${proyecto.cliente_nombre || "N/A"}`,
+      finalCanvas.width / 2,
+      infoY + 18,
+    );
 
     const link = document.createElement("a");
     link.download = `qr-${shortCode}.png`;
@@ -167,7 +125,7 @@ export function QRProyectoView() {
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6 px-2 pt-32 pb-8 md:px-4 md:pt-28">
-      <title>{`Código QR: ${proyecto.nombre} | KORE BMS`}</title>
+      <title>{`Código QR: ${proyecto.nombre} | KOREapp`}</title>
 
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -229,7 +187,9 @@ export function QRProyectoView() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1 text-left">
-                <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Usuario</label>
+                <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                  Usuario
+                </label>
                 <input
                   type="text"
                   placeholder=""
@@ -240,7 +200,9 @@ export function QRProyectoView() {
               </div>
 
               <div className="flex flex-col gap-1 text-left">
-                <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Contraseña</label>
+                <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                  Contraseña
+                </label>
                 <input
                   type="text"
                   placeholder=""
@@ -252,7 +214,9 @@ export function QRProyectoView() {
             </div>
 
             <div className="flex flex-col gap-1 text-left">
-              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">URL de Acceso</label>
+              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                URL de Acceso
+              </label>
               <input
                 type="text"
                 placeholder=""
@@ -279,7 +243,9 @@ export function QRProyectoView() {
 
             <div className="grid grid-cols-1 gap-4">
               <div className="flex flex-col items-start gap-0.5 px-4 py-2.5 rounded-xl bg-muted/20 dark:bg-white/5 border border-border dark:border-white/10 text-left">
-                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cliente</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                  Cliente
+                </span>
                 <span className="text-xs font-bold text-foreground dark:text-white break-words w-full">
                   {proyecto.cliente_nombre || "N/A"}
                 </span>
@@ -299,4 +265,79 @@ export function QRProyectoView() {
       </div>
     </div>
   );
+}
+
+export function QRProyectoView() {
+  const params = useParams();
+  const pathSegment =
+    typeof params?.proyecto === "string" ? params.proyecto : null;
+  const router = useRouter();
+  const { data: proyectos, isLoading: loadingProyectos } = useProyectos();
+  const { effectiveRole } = useUserContext();
+
+  const proyecto = useMemo(() => {
+    if (!proyectos || !pathSegment) return null;
+    return matchProyectoFromPathSegment(proyectos, pathSegment);
+  }, [pathSegment, proyectos]);
+
+  const notFound = Boolean(proyectos && pathSegment && !proyecto);
+
+  useEffect(() => {
+    if (!["super", "admin", "proyectos"].includes(effectiveRole)) {
+      router.replace("/kore");
+    }
+  }, [effectiveRole, router]);
+
+  useEffect(() => {
+    if (!pathSegment) {
+      router.replace("/kore/proyectos");
+    }
+  }, [pathSegment, router]);
+
+  useEffect(() => {
+    if (!proyecto || !pathSegment) return;
+
+    sessionStorage.setItem("selectedProyectoId", proyecto.id);
+    const canonicalSegment = getProyectoPathSegment(proyecto);
+    if (
+      pathSegment !== proyecto.id &&
+      pathSegment !== getProyectoCode(proyecto.id) &&
+      pathSegment !== canonicalSegment
+    ) {
+      router.replace(getProyectoQrPath(proyecto));
+    }
+  }, [pathSegment, proyecto, router]);
+
+  const loading =
+    !!pathSegment && (loadingProyectos || (!proyectos && !notFound));
+
+  if (loading && !notFound) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
+        <div className="flex flex-col items-center gap-4 text-muted-foreground">
+          <RefreshCw size={32} className="animate-spin text-celeste-kore" />
+          <p className="text-sm font-bold uppercase tracking-widest">
+            Cargando código QR…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !proyecto) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
+        <div className="text-center space-y-3">
+          <p className="text-lg font-black text-foreground">
+            Proyecto no encontrado
+          </p>
+          <p className="text-sm text-muted-foreground">
+            El proyecto solicitado no existe o fue eliminado.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <QRProyectoContent key={proyecto.id} proyecto={proyecto} />;
 }

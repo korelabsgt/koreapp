@@ -17,7 +17,9 @@ import {
   Proyecto,
   Profile,
   Cliente,
-  DeduccionItem
+  DeduccionItem,
+  ESTADOS_PROYECTO,
+  normalizeEstadoProyecto,
 } from "../lib/zod";
 import {
   createProyecto,
@@ -130,7 +132,7 @@ export default function ProyectoModal({ isOpen, onClose, proyecto }: ProyectoMod
       precio: 0,
       monto_mensual_fijo: 0,
       mantenimiento_fecha_cobro: "",
-      estado: "En Progreso",
+      estado: "En progreso",
       vendedor_id: "",
       deducciones: [],
     },
@@ -258,7 +260,7 @@ export default function ProyectoModal({ isOpen, onClose, proyecto }: ProyectoMod
           precio: Number(proyecto.precio) || 0,
           monto_mensual_fijo: Number(proyecto.monto_mensual_fijo) || 0,
           mantenimiento_fecha_cobro: proyecto.mantenimiento_fecha_cobro ? proyecto.mantenimiento_fecha_cobro.split("T")[0] : "",
-          estado: proyecto.estado || "En Progreso",
+          estado: normalizeEstadoProyecto(proyecto.estado),
           vendedor_id: proyecto.vendedor_id || "",
           deducciones: (proyecto.deducciones || []).map((d) => ({
             tipo: d.tipo,
@@ -278,7 +280,7 @@ export default function ProyectoModal({ isOpen, onClose, proyecto }: ProyectoMod
           precio: 0,
           monto_mensual_fijo: 0,
           mantenimiento_fecha_cobro: "",
-          estado: "En Progreso",
+          estado: "En progreso",
           vendedor_id: "",
           deducciones: [
             { tipo: "Vendedor", porcentaje: 10, descripcion: "Comisión Vendedor", usuario_id: "" },
@@ -347,9 +349,11 @@ export default function ProyectoModal({ isOpen, onClose, proyecto }: ProyectoMod
                   <div className="grid gap-2">
                     <Label htmlFor="estado">Estado</Label>
                     <SelectWrap id="estado" {...register("estado")}>
-                      <option value="En Progreso">En Progreso</option>
-                      <option value="En pausa">En Pausa</option>
-                      <option value="Finalizados">Finalizado</option>
+                      {ESTADOS_PROYECTO.map((estado) => (
+                        <option key={estado} value={estado}>
+                          {estado}
+                        </option>
+                      ))}
                     </SelectWrap>
                   </div>
                 </div>

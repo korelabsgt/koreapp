@@ -8,7 +8,8 @@ import {
   proyectoSchema,
   Proyecto,
   OtrosCamposProyecto,
-  Cliente
+  Cliente,
+  normalizeEstadoProyecto,
 } from "@/components/(Kore)/proyectos/lib/zod";
 import { z } from "zod";
 
@@ -149,7 +150,7 @@ export async function getProyectos(): Promise<Proyecto[]> {
       valor:        Number(p.valor) || 0,
       precio:       Number(p.valor) || 0,
       fecha_entrega: p.fecha_entrega,
-      estado:       p.estado,
+      estado:       normalizeEstadoProyecto(p.estado),
       activo:       p.activo,
       created_at:   p.created_at,
       created_by:   p.created_by,
@@ -266,7 +267,7 @@ export async function getProyectoById(id: string): Promise<Proyecto | null> {
     valor:        Number(p.valor) || 0,
     precio:       Number(p.valor) || 0,
     fecha_entrega: p.fecha_entrega,
-    estado:       p.estado,
+    estado:       normalizeEstadoProyecto(p.estado),
     activo:       p.activo,
     created_at:   p.created_at,
     created_by:   p.created_by,
@@ -345,7 +346,7 @@ export async function createProyecto(rawData: ProyectoFormValues) {
         nombre:        data.nombre,
         valor:         Number(data.precio) || 0,
         fecha_entrega: toDateMiddayGTM(data.fecha_entrega),
-        estado:        data.estado || "En Progreso",
+        estado:        normalizeEstadoProyecto(data.estado),
         cliente_id:    clienteId,
         created_by:    user.id,
         activo:        true,
@@ -399,7 +400,7 @@ export async function updateProyecto(id: string, rawData: Partial<ProyectoFormVa
     if (data.nombre !== undefined) patch.nombre = data.nombre;
     if (data.precio !== undefined) patch.valor = Number(data.precio);
     if (data.fecha_entrega !== undefined) patch.fecha_entrega = toDateMiddayGTM(data.fecha_entrega);
-    if (data.estado !== undefined) patch.estado = data.estado;
+    if (data.estado !== undefined) patch.estado = normalizeEstadoProyecto(data.estado);
     if (clienteId !== undefined) patch.cliente_id = clienteId;
 
     if (data.monto_mensual_fijo !== undefined || data.mantenimiento_fecha_cobro !== undefined) {

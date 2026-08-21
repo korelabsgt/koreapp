@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import ProyectoForm from "@/components/(Kore)/proyectos/forms/ProyectoForm";
+import ProyectoVerRedirect from "@/components/(Kore)/proyectos/ProyectoVerRedirect";
 
-export default function EditarProyectoPage() {
+export default function EditarProyectoLegacyPage() {
   return (
     <Suspense>
-      <ProyectoForm />
+      <ProyectoVerRedirect suffix="editar" />
     </Suspense>
   );
 }

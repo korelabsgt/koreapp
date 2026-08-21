@@ -5,7 +5,9 @@ import { login, getPublicAppSettings, type ActionState } from "./actions";
 import { getPasskeyOptions, verifyPasskey } from "./passkeys/passkeys-actions";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { MagicCard } from "@/components/ui/magic-card";
-import { Eye, EyeOff, Fingerprint, ScanFace, KeyRound, LogIn as LogInIcon, ArrowBigUpDash } from "lucide-react";
+import { MorphIcon } from "morphicons/react";
+import { Eye, EyeOff, LogIn as LogInIcon, ArrowRight } from "lucide";
+import { Fingerprint, ScanFace, KeyRound, ArrowBigUpDash } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +25,7 @@ export default function LogIn() {
   const [isPasskeysEnabled, setIsPasskeysEnabled] = useState<boolean>(false);
   const [isCapsLockOn, setIsCapsLockOn] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [loginHovered, setLoginHovered] = useState(false);
   const { theme } = useTheme();
 
   const handleKeyUpDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -137,9 +140,8 @@ export default function LogIn() {
                 className="w-full h-auto object-contain"
                 priority
               />
-              <p className="-mt-2 flex w-full justify-between text-sm font-bold uppercase tracking-[0.2em] text-white md:text-base">
-                <span>Systems</span>
-                <span>development</span>
+              <p className="-mt-2 w-full text-center text-sm font-bold uppercase tracking-[0.2em] text-white md:text-base">
+                Software Engineering
               </p>
             </div>
           </div>
@@ -237,13 +239,14 @@ export default function LogIn() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 cursor-pointer"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 cursor-pointer text-muted-foreground hover:text-foreground"
                       >
-                        {showPassword ? (
-                          <EyeOff className="size-4" />
-                        ) : (
-                          <Eye className="size-4" />
-                        )}
+                        <MorphIcon
+                          icon={showPassword ? EyeOff : Eye}
+                          size={16}
+                          strokeWidth={2}
+                          spring="snappy"
+                        />
                       </button>
                     </div>
                   </div>
@@ -259,10 +262,11 @@ export default function LogIn() {
                       setShowCredentials(true);
                     }
                   }}
+                  onMouseEnter={() => setLoginHovered(true)}
+                  onMouseLeave={() => setLoginHovered(false)}
                   className="w-full h-16 inline-flex items-center justify-center gap-3 rounded-xl text-lg font-black transition-all duration-300 bg-zinc-900 hover:bg-zinc-800 text-white cursor-pointer active:scale-[0.98] disabled:opacity-50"
                   disabled={showCredentials && (isPending || isPasskeyPending)}
                 >
-                  <LogInIcon className="size-6 text-white" strokeWidth={2.5} />
                   <span className="font-black">
                     {!showCredentials
                       ? "Iniciar sesión con contraseña"
@@ -270,6 +274,15 @@ export default function LogIn() {
                         ? "Verificando..."
                         : "Entrar ahora"}
                   </span>
+                  {!isPending && (
+                    <MorphIcon
+                      icon={loginHovered ? ArrowRight : LogInIcon}
+                      size={24}
+                      strokeWidth={2.5}
+                      spring="snappy"
+                      className="text-white"
+                    />
+                  )}
                 </button>
                 {isPasskeysEnabled && (
                   <>

@@ -3,7 +3,6 @@
 import type { User } from "@supabase/supabase-js";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import Swal from "sweetalert2";
 import {
   LogIn,
@@ -32,9 +31,7 @@ interface MenuProps {
 }
 
 export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
-  const pathname = usePathname();
   const { realRole, effectiveRole, simulatedRole, setSimulatedRole } = useUserContext();
-  const isRoot = pathname === "/kore";
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isPasskeysOpen, setIsPasskeysOpen] = useState(false);
@@ -42,11 +39,8 @@ export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
   const [isMiCuentaOpen, setIsMiCuentaOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
-  // On mobile root: no breadcrumb bar, so menu starts right below header (3.5rem)
-  // On mobile subpages: breadcrumb bar exists, so menu starts below header+breadcrumb (~6.5rem) 
-  // On desktop (md+): always below header (4rem)
-  const mobileTop = isRoot ? "top-14" : "top-[6.5rem]";
-  const mobileHeight = isRoot ? "h-[calc(100vh-3.5rem)]" : "h-[calc(100vh-6.5rem)]";
+  const mobileTop = "top-0";
+  const mobileHeight = "h-[100dvh]";
 
   const metadata = user?.user_metadata || {};
   const username =
@@ -97,7 +91,7 @@ export default function Menu({ isOpen, setIsOpen, user }: MenuProps) {
 
       <aside
         className={cn(
-          `fixed right-0 ${mobileTop} md:top-16 z-50 ${mobileHeight} md:h-[calc(100vh-4rem)] w-full sm:w-100 bg-white dark:bg-background border-l border-border/40 transition-transform duration-500 overflow-y-auto shadow-2xl flex flex-col`,
+          `fixed right-0 ${mobileTop} md:top-0 z-50 ${mobileHeight} md:h-[100dvh] w-full sm:w-100 bg-white dark:bg-background border-l border-border/40 transition-transform duration-500 overflow-y-auto shadow-2xl flex flex-col`,
           isOpen ? "translate-x-0" : "translate-x-full",
         )}
       >

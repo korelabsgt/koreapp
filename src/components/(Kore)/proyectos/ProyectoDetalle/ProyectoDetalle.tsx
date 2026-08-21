@@ -1,29 +1,42 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  ChevronDown,
-  RefreshCw,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useUserContext } from "@/components/(base)/providers/UserProvider";
-import { useProyectos, useDeleteProyecto } from "@/components/(Kore)/proyectos/lib/hooks";
+import {
+  getEstadoProyectoBadgeClass,
+  getProyectoCode,
+  getProyectoEditarPath,
+  getProyectoPathSegment,
+  getProyectoQrPath,
+  getProyectoVerPath,
+  matchProyectoFromPathSegment,
+} from "@/components/(Kore)/proyectos/lib/helpers";
+import {
+  useDeleteProyecto,
+  useProyectos,
+} from "@/components/(Kore)/proyectos/lib/hooks";
+import {
+  DeduccionItemConUsuario,
+  normalizeEstadoProyecto,
+  Proyecto,
+} from "@/components/(Kore)/proyectos/lib/zod";
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronDown, RefreshCw } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import Swal from "sweetalert2";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import { Proyecto, DeduccionItemConUsuario } from "@/components/(Kore)/proyectos/lib/zod";
 
 interface ProyectoDetalleProps {
   proyecto?: Proyecto;
 }
 
 const DASH_TIPO_STYLE: Record<string, string> = {
-  "IVA":           "bg-amber-500/10 text-amber-400 border-amber-500/25",
-  "Documentación": "bg-purple-500/10 text-purple-400 border-purple-500/25",
-  "Comisión":      "bg-blue-500/10 text-blue-400 border-blue-500/25",
-  "Vendedor":      "bg-blue-500/10 text-blue-400 border-blue-500/25",
-  "Kore":          "bg-red-500/10 text-red-400 border-red-500/25",
-  "Desarrollador": "bg-sky-500/10 text-sky-400 border-sky-500/25",
+  IVA: "bg-amber-500/10 text-amber-400 border-amber-500/25",
+  Documentación: "bg-purple-500/10 text-purple-400 border-purple-500/25",
+  Comisión: "bg-blue-500/10 text-blue-400 border-blue-500/25",
+  Vendedor: "bg-blue-500/10 text-blue-400 border-blue-500/25",
+  Kore: "bg-red-500/10 text-red-400 border-red-500/25",
+  Desarrollador: "bg-sky-500/10 text-sky-400 border-sky-500/25",
 };
 
 interface DetalleDed {
@@ -34,13 +47,23 @@ interface DetalleDed {
   usuario_id?: string;
 }
 
-function DetailDeduccionItem({ d, forceOpen, precio }: { d: DetalleDed; forceOpen: boolean; precio: number }) {
+function DetailDeduccionItem({
+  d,
+  forceOpen,
+  precio,
+}: {
+  d: DetalleDed;
+  forceOpen: boolean;
+  precio: number;
+}) {
   const [open, setOpen] = useState(false);
   const userName = d.usuario_nombre || "";
   const hasDetails = !!(userName || d.descripcion);
   const isOpen = forceOpen || open;
-  const pillClass = DASH_TIPO_STYLE[d.tipo] || "bg-zinc-500/10 text-zinc-400 border-zinc-500/25";
-  const valorMonetario = precio * (Number(d.porcentaje) || 0) / 100;
+  const pillClass =
+    DASH_TIPO_STYLE[d.tipo] ||
+    "bg-zinc-500/10 text-zinc-400 border-zinc-500/25";
+  const valorMonetario = (precio * (Number(d.porcentaje) || 0)) / 100;
 
   return (
     <div
@@ -50,14 +73,19 @@ function DetailDeduccionItem({ d, forceOpen, precio }: { d: DetalleDed; forceOpe
       onClick={() => hasDetails && setOpen((o) => !o)}
     >
       <div className="flex items-center gap-2 px-4 py-2.5">
-        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border shrink-0 ${pillClass}`}>
+        <span
+          className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border shrink-0 ${pillClass}`}
+        >
           {d.tipo}
         </span>
         <div className="flex-1" />
         <div className="flex items-center justify-end shrink-0 w-[120px]">
           <div className="flex flex-col items-end shrink-0 text-right">
             <span className="text-sm font-black tabular-nums text-foreground">
-              Q{valorMonetario.toLocaleString('en-US', {minimumFractionDigits: 2})}
+              Q
+              {valorMonetario.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+              })}
             </span>
             <span className="text-[10px] font-bold text-muted-foreground tabular-nums leading-none mt-0.5">
               {Number(d.porcentaje)}%
@@ -91,7 +119,9 @@ function DetailDeduccionItem({ d, forceOpen, precio }: { d: DetalleDed; forceOpe
             <div className="px-4 pb-2.5 space-y-0.5 border-t border-zinc-100 dark:border-zinc-800/60">
               {userName && (
                 <p className="text-[11px] text-foreground/60 pt-1.5">
-                  <span className="font-semibold text-foreground/50">Asignado a:</span>{" "}
+                  <span className="font-semibold text-foreground/50">
+                    Asignado a:
+                  </span>{" "}
                   <span className="font-bold text-sky-500">{userName}</span>
                 </p>
               )}
@@ -130,8 +160,19 @@ function DetailDedListWithToggle({
       if (t === "kore") return 1;
       if (t === "iva") return 2;
       if (t === "documentación" || t === "documentacion") return 3;
-      if (t === "desarrollador" || t === "desarrolladores" || t === "desarrollo") return 4;
-      if (t === "vendedor" || t === "vendedores" || t === "comisión" || t === "comision") return 5;
+      if (
+        t === "desarrollador" ||
+        t === "desarrolladores" ||
+        t === "desarrollo"
+      )
+        return 4;
+      if (
+        t === "vendedor" ||
+        t === "vendedores" ||
+        t === "comisión" ||
+        t === "comision"
+      )
+        return 5;
       return 6;
     };
     return getOrderScore(a.tipo) - getOrderScore(b.tipo);
@@ -154,7 +195,10 @@ function DetailDedListWithToggle({
         )}
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs font-black px-2 py-1 rounded-lg border text-destructive border-destructive/20 bg-destructive/10">
-            Total de proyecto: Q{totalDeduccionesMonetario.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            Total de proyecto: Q
+            {totalDeduccionesMonetario.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+            })}
           </span>
           {sortedDeds.length > 0 && (
             <div className="p-1 rounded-md bg-muted/40 dark:bg-white/10 flex items-center justify-center ml-1">
@@ -197,7 +241,10 @@ function DetailDedListWithToggle({
           </span>
           <div className="flex justify-end w-[120px]">
             <span className="font-bold shrink-0 text-right text-destructive pr-[26px]">
-              Q{totalDeduccionesMonetario.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              Q
+              {totalDeduccionesMonetario.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+              })}
             </span>
           </div>
         </div>
@@ -209,7 +256,8 @@ function DetailDedListWithToggle({
             </span>
             <div className="flex justify-end w-[120px]">
               <span className="font-bold shrink-0 text-right text-celeste-kore pr-[26px]">
-                Q{mant.toLocaleString("en-US", { minimumFractionDigits: 2 })} / mes
+                Q{mant.toLocaleString("en-US", { minimumFractionDigits: 2 })} /
+                mes
               </span>
             </div>
           </div>
@@ -228,54 +276,63 @@ function DetailDedListWithToggle({
   );
 }
 
-const getCode = (id: string) => {
-  if (!id) return "";
-  const clean = id.replace(/-/g, "").slice(0, 6).toUpperCase();
-  return clean.slice(0, 3) + "-" + clean.slice(3, 6);
-};
-
-export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDetalleProps) {
-  const [paramId, setParamId] = useState<string | null>(null);
+export default function ProyectoDetalle({
+  proyecto: proyectoProp,
+}: ProyectoDetalleProps) {
+  const params = useParams();
+  const pathSegment =
+    typeof params?.proyecto === "string" ? params.proyecto : null;
   const router = useRouter();
 
-  useEffect(() => {
-    if (proyectoProp) return;
-    const id = sessionStorage.getItem('selectedProyectoId');
-    if (id) {
-      setParamId(id);
-    } else {
-      router.replace('/kore/proyectos');
-    }
-  }, [router, proyectoProp]);
-
-  const [proyecto, setProyecto] = useState<Proyecto | null>(proyectoProp ?? null);
+  const [proyecto, setProyecto] = useState<Proyecto | null>(
+    proyectoProp ?? null,
+  );
   const [notFound, setNotFound] = useState(false);
 
   const { effectiveRole } = useUserContext();
   const isDeveloper = effectiveRole === "proyectos";
   const [showRiskZone, setShowRiskZone] = useState(false);
-  const [hoveredSegment, setHoveredSegment] = useState<{name: string, value: number, color: string} | null>(null);
+  const [hoveredSegment, setHoveredSegment] = useState<{
+    name: string;
+    value: number;
+    color: string;
+  } | null>(null);
 
   const { data: proyectos, isLoading: loadingProyectos } = useProyectos();
   const deleteMutation = useDeleteProyecto();
-  
-  // Update proyecto state when data is loaded
+
   useEffect(() => {
     if (proyectoProp) {
       setProyecto(proyectoProp);
       return;
     }
-    if (!paramId || !proyectos) return;
-    
-    const found = proyectos.find((p: Proyecto) => p.id === paramId || getCode(p.id) === paramId);
+    if (!pathSegment) {
+      router.replace("/kore/proyectos");
+      return;
+    }
+    if (!proyectos) return;
+
+    const found = matchProyectoFromPathSegment(proyectos, pathSegment);
     if (found) {
       setProyecto(found);
+      setNotFound(false);
+      sessionStorage.setItem("selectedProyectoId", found.id);
+      if (
+        pathSegment !== found.id &&
+        pathSegment !== getProyectoCode(found.id) &&
+        pathSegment !== getProyectoPathSegment(found)
+      ) {
+        router.replace(getProyectoVerPath(found));
+      }
     } else {
       setNotFound(true);
     }
-  }, [paramId, proyectoProp, proyectos]);
+  }, [pathSegment, proyectoProp, proyectos, router]);
 
-  const loadingProyecto = (!proyectoProp && !!paramId) && (loadingProyectos || !proyecto);
+  const loadingProyecto =
+    !proyectoProp &&
+    !!pathSegment &&
+    (loadingProyectos || (!proyecto && !notFound));
 
   // Role guard
   useEffect(() => {
@@ -290,7 +347,9 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
       <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
         <div className="flex flex-col items-center gap-4 text-muted-foreground">
           <RefreshCw size={32} className="animate-spin text-celeste-kore" />
-          <p className="text-sm font-bold uppercase tracking-widest">Cargando proyecto…</p>
+          <p className="text-sm font-bold uppercase tracking-widest">
+            Cargando proyecto…
+          </p>
         </div>
       </div>
     );
@@ -301,19 +360,25 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
     return (
       <div className="flex-1 flex items-center justify-center p-4 pt-32 md:p-8 md:pt-24">
         <div className="text-center space-y-3">
-          <p className="text-lg font-black text-foreground">Proyecto no encontrado</p>
-          <p className="text-sm text-muted-foreground">El proyecto que buscas no existe o fue eliminado.</p>
+          <p className="text-lg font-black text-foreground">
+            Proyecto no encontrado
+          </p>
+          <p className="text-sm text-muted-foreground">
+            El proyecto que buscas no existe o fue eliminado.
+          </p>
         </div>
       </div>
     );
   }
 
-
-
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr + "T00:00:00");
-    return date.toLocaleDateString("es-GT", { day: "2-digit", month: "short", year: "numeric" });
+    return date.toLocaleDateString("es-GT", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   const formatPhoneDisplay = (phone: string | null | undefined): string => {
@@ -336,7 +401,9 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
   };
 
   const handleDeleteProyecto = async () => {
-    const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark");
+    const isDark =
+      typeof window !== "undefined" &&
+      document.documentElement.classList.contains("dark");
     let timerInterval: ReturnType<typeof setInterval>;
     const result = await Swal.fire({
       title: "Eliminar Proyecto",
@@ -351,7 +418,7 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
       color: isDark ? "#ffffff" : "#000000",
       didOpen: () => {
         Swal.disableButtons();
-        const b = Swal.getHtmlContainer()?.querySelector('b');
+        const b = Swal.getHtmlContainer()?.querySelector("b");
         let secondsLeft = 7;
         if (b) b.textContent = String(secondsLeft);
         timerInterval = setInterval(() => {
@@ -372,7 +439,7 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
       },
       willClose: () => {
         clearInterval(timerInterval);
-      }
+      },
     });
 
     if (result.isConfirmed) {
@@ -381,18 +448,27 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
           if (!res.error) {
             router.push("/kore/proyectos");
           }
-        }
+        },
       });
     }
   };
 
   const precio = Number(proyecto.precio) || 0;
   const mant = Number(proyecto.mantenimiento) || 0;
-  
+
   const getDedSum = (tipo: string) => {
     return (proyecto.deducciones || [])
-      .filter((d: DeduccionItemConUsuario) => d.tipo.toLowerCase() === tipo.toLowerCase() || (tipo === "Vendedor" && d.tipo === "Comisión") || (tipo === "Desarrollador" && d.tipo === "Desarrollo"))
-      .reduce((acc: number, curr: DeduccionItemConUsuario) => acc + (precio * (Number(curr.porcentaje) || 0) / 100), 0);
+      .filter(
+        (d: DeduccionItemConUsuario) =>
+          d.tipo.toLowerCase() === tipo.toLowerCase() ||
+          (tipo === "Vendedor" && d.tipo === "Comisión") ||
+          (tipo === "Desarrollador" && d.tipo === "Desarrollo"),
+      )
+      .reduce(
+        (acc: number, curr: DeduccionItemConUsuario) =>
+          acc + (precio * (Number(curr.porcentaje) || 0)) / 100,
+        0,
+      );
   };
 
   const iva = getDedSum("IVA");
@@ -401,7 +477,11 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
   const dev = getDedSum("Desarrollador");
   const kore = getDedSum("Kore");
 
-  const totalDeducciones = (proyecto.deducciones || []).reduce((acc: number, curr: DeduccionItemConUsuario) => acc + (precio * (Number(curr.porcentaje) || 0) / 100), 0);
+  const totalDeducciones = (proyecto.deducciones || []).reduce(
+    (acc: number, curr: DeduccionItemConUsuario) =>
+      acc + (precio * (Number(curr.porcentaje) || 0)) / 100,
+    0,
+  );
   const restante = precio - totalDeducciones;
 
   const donutData = [
@@ -412,12 +492,12 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
     { name: "Doc", value: doc, color: "#a1a1aa" },
     { name: "Kore", value: kore, color: "#f59e0b" },
     { name: "Mantenimiento", value: mant, color: "#14b8a6" },
-  ].filter(d => d.value > 0);
+  ].filter((d) => d.value > 0);
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6 px-2 pt-32 pb-8 md:px-4 md:pt-28">
       {/* Dynamic Browser Tab Title */}
-      <title>{`Detalle de Proyecto: ${proyecto.nombre} | KORE BMS`}</title>
+      <title>{`Detalle de Proyecto: ${proyecto.nombre} | KOREapp`}</title>
 
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -434,8 +514,7 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
               <button
                 type="button"
                 onClick={() => {
-                  if(proyecto.id) sessionStorage.setItem('selectedProyectoId', proyecto.id);
-                  router.push(`/kore/proyectos/ver/qr`);
+                  router.push(getProyectoQrPath(proyecto));
                 }}
                 className="flex-1 sm:flex-none flex items-center justify-center px-2 py-2.5 sm:px-6 sm:py-4 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 text-black dark:text-white transition-all font-black text-[10px] sm:text-sm whitespace-nowrap cursor-pointer uppercase"
               >
@@ -444,8 +523,7 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
               <button
                 type="button"
                 onClick={() => {
-                  if(proyecto.id) sessionStorage.setItem('selectedProyectoId', proyecto.id);
-                  router.push(`/kore/proyectos/ver/editar`);
+                  router.push(getProyectoEditarPath(proyecto));
                 }}
                 className="flex-1 sm:flex-none flex items-center justify-center px-2 py-2.5 sm:px-6 sm:py-4 rounded-xl bg-celeste-kore text-black hover:opacity-90 transition-all font-black text-[10px] sm:text-sm whitespace-nowrap cursor-pointer uppercase"
               >
@@ -462,43 +540,76 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
           {/* Info General */}
           <div className="rounded-2xl border border-celeste-kore/55 dark:border-white/10 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl shadow-none dark:shadow-2xl dark:shadow-black/20 p-5 sm:p-6 flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-base sm:text-2xl font-black tracking-tight text-zinc-950 dark:text-zinc-50">{proyecto.nombre}</h2>
+              <h2 className="text-base sm:text-2xl font-black tracking-tight text-zinc-950 dark:text-zinc-50">
+                {proyecto.nombre}
+              </h2>
               {proyecto.fecha_entrega && (
-                <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5">Entrega: <span className="font-semibold text-zinc-900 dark:text-zinc-100">{formatDate(proyecto.fecha_entrega)}</span></p>
+                <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5">
+                  Entrega:{" "}
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                    {formatDate(proyecto.fecha_entrega)}
+                  </span>
+                </p>
               )}
             </div>
             <div className="flex flex-col items-end gap-1.5 shrink-0">
               <code className="text-[10px] sm:text-xs font-mono font-bold text-celeste-kore bg-celeste-kore/10 px-2.5 py-1 rounded-lg border border-celeste-kore/20">
-                {getCode(proyecto.id)}
+                {getProyectoCode(proyecto.id)}
               </code>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[8px] sm:text-[10px] font-black uppercase tracking-wider border ${
-                proyecto.estado === 'En Progreso' ? 'bg-celeste-kore/10 text-celeste-kore border-celeste-kore/20' :
-                proyecto.estado === 'Finalizados' ? 'bg-muted text-muted-foreground border-border' :
-                'bg-azul-kore/10 text-azul-kore border-azul-kore/20'
-              }`}>
-                {proyecto.estado}
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded text-[8px] sm:text-[10px] font-black uppercase tracking-wider border ${getEstadoProyectoBadgeClass(proyecto.estado)}`}
+              >
+                {normalizeEstadoProyecto(proyecto.estado)}
               </span>
             </div>
           </div>
 
           {/* Info Cliente */}
           <div className="rounded-2xl border border-celeste-kore/55 dark:border-white/10 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl shadow-none dark:shadow-2xl dark:shadow-black/20 p-5 sm:p-6 space-y-2.5">
-            <h3 className="text-[10px] sm:text-xs font-black text-celeste-kore uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800/80 pb-1.5">Información del Cliente</h3>
+            <h3 className="text-[10px] sm:text-xs font-black text-celeste-kore uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800/80 pb-1.5">
+              Información del Cliente
+            </h3>
             <div className="grid grid-cols-1 gap-2 text-xs sm:text-sm">
-              <p><span className="text-zinc-500 dark:text-zinc-400">Nombre:</span> <span className="font-bold text-zinc-950 dark:text-zinc-50">{proyecto.cliente_nombre || 'N/A'}</span></p>
+              <p>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  Nombre:
+                </span>{" "}
+                <span className="font-bold text-zinc-950 dark:text-zinc-50">
+                  {proyecto.cliente_nombre || "N/A"}
+                </span>
+              </p>
               {proyecto.cliente_nit && (
-                <p><span className="text-zinc-500 dark:text-zinc-400">NIT:</span> <span className="font-bold text-zinc-950 dark:text-zinc-50">{proyecto.cliente_nit}</span></p>
+                <p>
+                  <span className="text-zinc-500 dark:text-zinc-400">NIT:</span>{" "}
+                  <span className="font-bold text-zinc-950 dark:text-zinc-50">
+                    {proyecto.cliente_nit}
+                  </span>
+                </p>
               )}
               {proyecto.cliente_telefono && (
                 <p className="flex items-center gap-1.5">
-                  <span className="text-zinc-500 dark:text-zinc-400">Teléfono:</span> 
-                  <a href={`https://wa.me/${formatWhatsAppLink(proyecto.cliente_telefono)}`} target="_blank" rel="noopener noreferrer" className="font-bold text-celeste-kore hover:underline flex items-center gap-1">
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    Teléfono:
+                  </span>
+                  <a
+                    href={`https://wa.me/${formatWhatsAppLink(proyecto.cliente_telefono)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-celeste-kore hover:underline flex items-center gap-1"
+                  >
                     {formatPhoneDisplay(proyecto.cliente_telefono)}
                   </a>
                 </p>
               )}
               {proyecto.cliente_correo && (
-                <p><span className="text-zinc-500 dark:text-zinc-400">Correo:</span> <span className="font-bold text-zinc-950 dark:text-zinc-50 break-all">{proyecto.cliente_correo}</span></p>
+                <p>
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    Correo:
+                  </span>{" "}
+                  <span className="font-bold text-zinc-950 dark:text-zinc-50 break-all">
+                    {proyecto.cliente_correo}
+                  </span>
+                </p>
               )}
             </div>
           </div>
@@ -506,8 +617,10 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
 
         {/* Right Column (Finanzas & Dona) */}
         <div className="rounded-2xl border border-celeste-kore/55 dark:border-white/10 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl shadow-none dark:shadow-2xl dark:shadow-black/20 p-5 sm:p-6 space-y-3">
-          <h3 className="text-[10px] sm:text-xs font-black text-celeste-kore uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800/80 pb-1.5">Distribución Financiera</h3>
-          
+          <h3 className="text-[10px] sm:text-xs font-black text-celeste-kore uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800/80 pb-1.5">
+            Distribución Financiera
+          </h3>
+
           {donutData.length > 0 ? (
             <div className="w-full h-[180px] sm:h-[220px] flex items-center justify-center relative">
               <ResponsiveContainer width="100%" height="100%">
@@ -520,7 +633,9 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
                     cornerRadius={6}
                     dataKey="value"
                     stroke="none"
-                    onMouseEnter={(_: unknown, index: number) => setHoveredSegment(donutData[index])}
+                    onMouseEnter={(_: unknown, index: number) =>
+                      setHoveredSegment(donutData[index])
+                    }
                     onMouseLeave={() => setHoveredSegment(null)}
                   >
                     {donutData.map((entry, index) => (
@@ -533,23 +648,36 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
                 <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-black">
                   {hoveredSegment ? hoveredSegment.name : "Valor Total"}
                 </span>
-                <span 
+                <span
                   className="text-sm sm:text-lg font-black text-zinc-950 dark:text-zinc-50"
-                  style={{ color: hoveredSegment ? hoveredSegment.color : undefined }}
+                  style={{
+                    color: hoveredSegment ? hoveredSegment.color : undefined,
+                  }}
                 >
-                  Q{hoveredSegment ? hoveredSegment.value.toLocaleString() : precio.toLocaleString()}
+                  Q
+                  {hoveredSegment
+                    ? hoveredSegment.value.toLocaleString()
+                    : precio.toLocaleString()}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="text-center py-6 text-zinc-500 dark:text-zinc-400 text-xs">No hay datos financieros.</div>
+            <div className="text-center py-6 text-zinc-500 dark:text-zinc-400 text-xs">
+              No hay datos financieros.
+            </div>
           )}
 
           {donutData.length > 0 && (
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-1.5 px-1 text-[9px] sm:text-[10px] uppercase font-black text-zinc-500 dark:text-zinc-400">
               {donutData.map((item, idx) => (
-                <div key={`legend-${idx}`} className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                <div
+                  key={`legend-${idx}`}
+                  className="flex items-center gap-1.5"
+                >
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
                   <span>{item.name}</span>
                 </div>
               ))}
@@ -558,15 +686,23 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
 
           {(() => {
             const activeDeds = (proyecto.deducciones || []).filter(
-              (d: DeduccionItemConUsuario) => (Number(d.porcentaje) || 0) > 0
+              (d: DeduccionItemConUsuario) => (Number(d.porcentaje) || 0) > 0,
             );
             const totalPct = activeDeds.reduce(
-              (acc: number, d: DeduccionItemConUsuario) => acc + (Number(d.porcentaje) || 0), 0
+              (acc: number, d: DeduccionItemConUsuario) =>
+                acc + (Number(d.porcentaje) || 0),
+              0,
             );
             if (activeDeds.length === 0) return null;
 
             return (
-              <DetailDedListWithToggle deds={activeDeds} totalPct={totalPct} precio={precio} mant={mant} restante={restante} />
+              <DetailDedListWithToggle
+                deds={activeDeds}
+                totalPct={totalPct}
+                precio={precio}
+                mant={mant}
+                restante={restante}
+              />
             );
           })()}
         </div>
@@ -602,9 +738,12 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
               >
                 <div className="p-4 sm:p-6 border-t border-red-500/20 dark:border-red-950/20 bg-red-500/[0.02] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
-                    <h4 className="text-xs font-black text-foreground uppercase">Eliminar este proyecto</h4>
+                    <h4 className="text-xs font-black text-foreground uppercase">
+                      Eliminar este proyecto
+                    </h4>
                     <p className="text-[10px] text-muted-foreground mt-1 font-bold uppercase tracking-wide">
-                      Una vez que elimines un proyecto, no podrás recuperar sus datos ni la distribución financiera asignada.
+                      Una vez que elimines un proyecto, no podrás recuperar sus
+                      datos ni la distribución financiera asignada.
                     </p>
                   </div>
                   <button
@@ -620,7 +759,6 @@ export default function ProyectoDetalle({ proyecto: proyectoProp }: ProyectoDeta
           </AnimatePresence>
         </div>
       )}
-
     </div>
   );
 }
